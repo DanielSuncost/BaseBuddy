@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Unit tests
+        env:
+          DETECTION_ENABLED: "false"
+          HOME_SCENES_ENABLE: "false"
+          BASEBUDDY_REPO_ROOT: ${{ github.workspace }}
+          BASEBUDDY_APP_ROOT: ${{ github.workspace }}/basebuddy
+        run: python -m pytest tests/ -q
+
+      - name: Smoke test (imports + app factory)
+        env:
+          DETECTION_ENABLED: "false"
+          HOME_SCENES_ENABLE: "false"
+          BASEBUDDY_REPO_ROOT: ${{ github.workspace }}
+          BASEBUDDY_APP_ROOT: ${{ github.workspace }}/basebuddy
+        run: python scripts/smoke_test.py
+
+      - name: Syntax check application tree
+        run: python -m compileall -q basebuddy

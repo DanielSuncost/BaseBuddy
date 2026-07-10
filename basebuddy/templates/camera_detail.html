@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cam_name }} - Inference View{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/camera_detail.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ cam_name }}</h1>
+    <p class="page-subtitle">Live inference view with object detection</p>
+</div>
+
+<div class="inference-container">
+    <div class="camera-view-wrapper">
+        <div class="camera-container" id="cameraImg{{ cam_id }}">
+            <img src="/video/{{ cam_id }}" alt="{{ cam_name }}" id="cameraStream{{ cam_id }}">
+            <div class="camera-overlay" id="overlay{{ cam_id }}"></div>
+            <div class="region-layer" id="regionLayer{{ cam_id }}" hidden>
+                <svg class="region-svg" id="regionSvg{{ cam_id }}" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls-panel">
+        <div class="control-section">
+            <h3><span class="material-icons-outlined">videocam</span> Camera Controls</h3>
+            <div class="control-buttons">
+                <button class="btn btn-primary" onclick="window.location.href='/'">
+                    <span class="material-icons-outlined">arrow_back</span> Back to Wall
+                </button>
+                <button class="btn btn-secondary" onclick="toggleFullscreen()">
+                    <span class="material-icons-outlined">fullscreen</span> Fullscreen
+                </button>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3><span class="material-icons-outlined">smart_toy</span> Detection</h3>
+            <div class="stat-grid" id="detectionStats{{ cam_id }}">
+                <div class="stat-item">
+                    <span class="stat-label">Objects</span>
+                    <span class="stat-value" id="objectCount{{ cam_id }}">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tracks</span>
+                    <span class="stat-value" id="tracks{{ cam_id }}">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3><span class="material-icons-outlined">movie</span> Recording</h3>
+            <div class="control-buttons">
+                <button class="btn btn-danger" id="recordBtn{{ cam_id }}" onclick="toggleRecording({{ cam_id }})">
+                    <span class="material-icons-outlined">fiber_manual_record</span> Record
+                </button>
+                <button class="btn btn-secondary" onclick="viewRecordings({{ cam_id }})">
+                    <span class="material-icons-outlined">folder</span> View Recordings
+                </button>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <h3><span class="material-icons-outlined">crop_free</span> Detection Regions</h3>
+            <p class="control-hint">Draw labeled polygons on the video. Use labels for traffic analytics, detection tagging, and class-based notifications.</p>
+            <div class="control-buttons">
+                <button type="button" class="btn btn-secondary" id="regionBtn{{ cam_id }}">
+                    <span class="material-icons-outlined">edit</span> Edit Regions
+                </button>
+            </div>
+            <div id="regionEditorPanel{{ cam_id }}" class="region-editor-panel" hidden>
+                <div class="region-filter-toggle" role="group" aria-label="Filter mode for new regions">
+                    <button type="button" class="region-filter-btn active" id="regionFilterInclude{{ cam_id }}">Include</button>
+                    <button type="button" class="region-filter-btn" id="regionFilterExclude{{ cam_id }}">Exclude</button>
+                    <button type="button" class="region-filter-btn" id="regionFilterNone{{ cam_id }}">None</button>
+                </div>
+                <p class="region-filter-hint" id="regionFilterHint{{ cam_id }}">Include: only detect inside this region.</p>
+                <p class="control-hint region-draw-hint">Click to add vertices · double-click or Enter to finish · Backspace to undo</p>
+                <ul class="region-list" id="regionList{{ cam_id }}"></ul>
+                <div id="regionProps{{ cam_id }}" class="region-props" hidden></div>
+                <div class="region-editor-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="regionFinishBtn{{ cam_id }}">
+                        <span class="material-icons-outlined">check</span> Finish polygon
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" id="regionSaveBtn{{ cam_id }}">
+                        <span class="material-icons-outlined">save</span> Save
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="regionClearBtn{{ cam_id }}">
+                        Clear all
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3><span class="material-icons-outlined">build</span> Maintenance</h3>
+            <div class="control-buttons">
+                <button class="btn btn-warning" onclick="clearTracks({{ cam_id }})">
+                    <span class="material-icons-outlined">delete_sweep</span> Clear Tracks
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const camId = {{ cam_id }};
+</script>
+<script src="{{ url_for('static', filename='js/region_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_detail.js') }}"></script>
+{% endblock %}

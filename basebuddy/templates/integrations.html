@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Integrations{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/integrations.css') }}">
+{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><span class="material-icons-outlined">hub</span> Integrations</h1>
+    <p class="page-subtitle">Alert rules, Telegram, email, SMS, MQTT, and recording</p>
+</div>
+
+<form id="int-form" class="int-form">
+    <!-- Notification rules -->
+    <section class="card int-section int-rules-section">
+        <div class="int-section-head">
+            <h2>Alert rules</h2>
+            <button type="button" class="btn btn-secondary btn-sm" id="nr-add"><span class="material-icons-outlined">add</span> Add rule</button>
+        </div>
+        <p class="int-note">Match camera + class → choose channels. Use <code>*</code> for all classes. Empty camera = all cameras. MQTT events publish automatically when MQTT is enabled below.</p>
+        <div class="nr-table-wrap">
+            <table class="nr-table" id="nr-table">
+                <thead>
+                    <tr>
+                        <th>On</th>
+                        <th>Camera</th>
+                        <th>Class</th>
+                        <th>When</th>
+                        <th>Min conf</th>
+                        <th>Cooldown</th>
+                        <th>Channels</th>
+                        <th>Snapshot</th>
+                        <th>Clip</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="nr-body"></tbody>
+            </table>
+        </div>
+        <p class="int-note" id="nr-empty">No rules yet — alerts fall back to global settings below if enabled.</p>
+    </section>
+
+    <section class="card int-section">
+        <h2>Global alert settings</h2>
+        <label class="int-switch"><input type="checkbox" id="NOTIFY_ENABLED" checked> Notifications enabled</label>
+        <label class="int-switch"><input type="checkbox" id="NOTIFY_FALLBACK_GLOBAL" checked> Fallback: use global channels when no rule matches</label>
+        <label class="int-switch"><input type="checkbox" id="NOTIFY_INCLUDE_CLIP_DEFAULT"> Default: send clip on event end (fallback)</label>
+        <label>Public base URL <span class="int-hint">for SMS/Pushover links, e.g. https://cam.home:5001</span>
+            <input type="url" id="NOTIFY_PUBLIC_BASE_URL" placeholder="https://…">
+        </label>
+        <label>Webhook URL <input type="url" id="NOTIFY_WEBHOOK_URL" placeholder="https://…"></label>
+    </section>
+
+    <section class="card int-section">
+        <h2>Telegram</h2>
+        <div class="int-grid">
+            <label>Bot token <input type="password" id="TELEGRAM_BOT_TOKEN" autocomplete="off"></label>
+            <label>Chat ID <input type="text" id="TELEGRAM_CHAT_ID"></label>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm int-test" data-channel="telegram">Test Telegram</button>
+    </section>
+
+    <section class="card int-section">
+        <h2>Email (SMTP)</h2>
+        <div class="int-grid">
+            <label>SMTP host <input type="text" id="SMTP_HOST" placeholder="smtp.gmail.com"></label>
+            <label>Port <input type="number" id="SMTP_PORT" value="587"></label>
+            <label>Username <input type="text" id="SMTP_USER" autocomplete="off"></label>
+            <label>Password <input type="password" id="SMTP_PASSWORD" autocomplete="new-password"></label>
+            <label>From <input type="email" id="SMTP_FROM"></label>
+            <label>To (comma-separated) <input type="text" id="SMTP_TO"></label>
+        </div>
+        <label class="int-switch"><input type="checkbox" id="SMTP_USE_TLS" checked> Use TLS</label>
+        <button type="button" class="btn btn-secondary btn-sm int-test" data-channel="email">Test email</button>
+    </section>
+
+    <section class="card int-section">
+        <h2>Pushover &amp; SMS</h2>
+        <div class="int-grid">
+            <label>Pushover user key <input type="text" id="PUSHOVER_USER_KEY"></label>
+            <label>Pushover API token <input type="text" id="PUSHOVER_API_TOKEN"></label>
+            <label>Twilio SID <input type="text" id="TWILIO_ACCOUNT_SID"></label>
+            <label>Twilio auth token <input type="password" id="TWILIO_AUTH_TOKEN"></label>
+            <label>Twilio from number <input type="text" id="TWILIO_FROM_NUMBER" placeholder="+1…"></label>
+            <label>Your mobile <input type="text" id="TWILIO_TO_NUMBER" placeholder="+1…"></label>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm int-test" data-channel="pushover">Test Pushover</button>
+        <button type="button" class="btn btn-secondary btn-sm int-test" data-channel="sms">Test SMS</button>
+    </section>
+
+    <section class="card int-section">
+        <h2>MQTT <span class="int-hint">Home Assistant</span></h2>
+        <label class="int-switch"><input type="checkbox" id="MQTT_ENABLED"> Enable MQTT</label>
+        <div class="int-grid">
+            <label>Host <input type="text" id="MQTT_HOST" placeholder="127.0.0.1"></label>
+            <label>Port <input type="number" id="MQTT_PORT" value="1883"></label>
+            <label>Topic prefix <input type="text" id="MQTT_TOPIC_PREFIX" value="basebuddy"></label>
+            <label>Client ID <input type="text" id="MQTT_CLIENT_ID" value="basebuddy"></label>
+            <label>Username <input type="text" id="MQTT_USERNAME"></label>
+            <label>Password <input type="password" id="MQTT_PASSWORD"></label>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="int-test-mqtt">Test MQTT</button>
+    </section>
+
+    <section class="card int-section">
+        <h2>Recording &amp; clips</h2>
+        <div class="int-grid">
+            <label>Recording mode
+                <select id="RECORDING_MODE">
+                    <option value="continuous">Continuous</option>
+                    <option value="motion">Motion</option>
+                    <option value="detection">Detection-triggered</option>
+                    <option value="off">Off</option>
+                </select>
+            </label>
+            <label>Clip pre-roll (s) <input type="number" id="EVENT_CLIP_PRE_S" min="1" max="30" value="5"></label>
+            <label>Clip post-roll (s) <input type="number" id="EVENT_CLIP_POST_S" min="1" max="60" value="5"></label>
+        </div>
+    </section>
+
+    <section class="card int-section">
+        <h2>Performance</h2>
+        <div class="int-grid">
+            <label>FFmpeg HW decode
+                <select id="FFMPEG_HWACCEL">
+                    <option value="">Software</option>
+                    <option value="vaapi">VAAPI</option>
+                    <option value="cuda">CUDA</option>
+                    <option value="qsv">QSV</option>
+                </select>
+            </label>
+            <label>Inference backend
+                <select id="INFERENCE_BACKEND">
+                    <option value="pt">PyTorch (.pt)</option>
+                    <option value="tensorrt">TensorRT</option>
+                    <option value="openvino">OpenVINO</option>
+                </select>
+            </label>
+            <label class="int-switch int-span2"><input type="checkbox" id="MULTIPROC_DETECTION"> Multi-process detection</label>
+        </div>
+    </section>
+
+    <div class="int-actions">
+        <button type="submit" class="btn btn-primary"><span class="material-icons-outlined">save</span> Save settings</button>
+    </div>
+    <p id="int-toast" class="int-toast" hidden></p>
+</form>
+
+<script src="{{ url_for('static', filename='js/integrations.js') }}"></script>
+{% endblock %}

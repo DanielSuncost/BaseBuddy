@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}Timelapse{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/timelapse.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="timelapse-container">
+    <!-- Camera Selector -->
+    <div class="camera-selector">
+        <button class="camera-btn all-cameras {% if cam_id is none %}active{% endif %}" onclick="window.location.href='/timelapse'">
+            <span class="material-icons-outlined" style="font-size:32px;">apps</span>
+            <div style="font-weight:600; margin-top:4px;">All Cameras</div>
+        </button>
+        {% for c in cameras %}
+        <button class="camera-btn {% if cam_id == c.id %}active{% endif %}" onclick="window.location.href='/timelapse/{{ c.id }}'">
+            {% if c.thumbnail %}
+            <img src="{{ c.thumbnail }}" class="thumbnail" alt="{{ c.name }}">
+            {% else %}
+            <div class="no-thumbnail"><span class="material-icons-outlined" style="font-size:48px; color:white;">videocam</span></div>
+            {% endif %}
+            <div class="label">
+                <span class="name">{{ c.name }}</span>
+                <span class="count">{{ c.count }} frames</span>
+            </div>
+        </button>
+        {% endfor %}
+    </div>
+    
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+        <button class="tab-btn active" onclick="switchTab('browser')">
+            <span class="material-icons-outlined">photo_library</span>
+            Frame Browser
+        </button>
+        <button class="tab-btn" onclick="switchTab('gallery')">
+            <span class="material-icons-outlined">movie_filter</span>
+            Timelapse Gallery
+        </button>
+        <button class="tab-btn" onclick="switchTab('schedules')">
+            <span class="material-icons-outlined">event_repeat</span>
+            Scheduled Timelapses
+        </button>
+    </div>
+    
+    <!-- Frame Browser Tab -->
+    <div id="browserTab" class="tab-content active">
+        <div class="builder-panel">
+            <!-- Left: Range Selection -->
+            <div class="range-selector">
+                <h3><span class="material-icons-outlined">schedule</span> Time Range</h3>
+                <div class="range-row">
+                    <label>From:</label>
+                    <input type="date" id="startDate" onchange="loadImages()">
+                    <input type="time" id="startTime" onchange="loadImages()" value="00:00">
+                    <label style="margin-left:12px;">To:</label>
+                    <input type="date" id="endDate" onchange="loadImages()">
+                    <input type="time" id="endTime" onchange="loadImages()" value="23:59">
+                </div>
+                <div class="range-actions">
+                    <button class="range-btn primary" onclick="selectAllInRange()">
+                        <span class="material-icons-outlined">done_all</span> Select
+                    </button>
+                    <button class="range-btn secondary" onclick="clearSelection()">Clear</button>
+                    <button class="range-btn secondary" onclick="selectToday()">Today</button>
+                    <button class="range-btn secondary" onclick="selectYesterday()">Yesterday</button>
+                </div>
+                
+                <!-- Filters -->
+                <div class="filters-grid">
+                    <!-- Dark Frame Filter -->
+                    <div>
+                        <label class="filter-label">
+                            <input type="checkbox" id="excludeDarkFrames" onchange="toggleDarkFrameFilter()">
+                            <span class="material-icons-outlined" style="font-size:16px; color:#f59e0b;">wb_sunny</span>
+                            Exclude Dark
+                        </label>
+                        <div id="brightnessThresholdContainer" style="display:none; padding-left:20px;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <input type="range" id="brightnessThreshold" min="0" max="100" value="10" style="flex:1; height:4px;" oninput="updateBrightnessLabel()">
+                                <span id="brightnessLabel" style="font-size:11px; color:#374151; font-weight:600; min-width:30px;">10%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Time of Day Filter -->
+                    <div>
+                        <label class="filter-label">
+                            <input type="checkbox" id="applyDailyTimeRange" onchange="toggleDailyTimeRange()">
+                            <span class="material-icons-outlined" style="font-size:16px; color:#3b82f6;">schedule</span>
+                            Daily Time
+                        </label>
+                        <div id="dailyTimeRangeContainer" style="display:none; padding-left:20px;">
+                            <div style="display:flex; align-items:center; gap:4px; font-size:11px;">
+                                <input type="time" id="dailyStartTime" value="06:00" class="daily-time-input">
+                                <span style="color:#6b7280;">-</span>
+                                <input type="time" id="dailyEndTime" value="23:00" class="daily-time-input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="range-stats">
+                    <div class="stat">
+                        <div class="stat-value" id="totalFrames">0</div>
+                        <div class="stat-label">In Range</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="selectedFrames">0</div>
+                        <div class="stat-label">Selected</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="avgInterval">-</div>
+                        <div class="stat-label">Avg Interval</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="totalDuration">-</div>
+                        <div class="stat-label">Total Duration</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right: Export Panel -->
+            <div class="export-panel">
+                <h3><span class="material-icons-outlined">movie_creation</span> Export Timelapse</h3>
+                
+                <div class="export-col">
+                    <label>Frame Skip</label>
+                    <input type="range" id="frameSkip" min="1" max="30" value="1" oninput="updateExportPreview()">
+                    <div class="frame-skip-val" id="frameSkipValue">Every frame</div>
+                </div>
+                
+                <div class="export-col">
+                    <label>Output FPS</label>
+                    <select id="outputFps" onchange="updateExportPreview()">
+                        <option value="5">5 fps</option>
+                        <option value="10">10 fps</option>
+                        <option value="15" selected>15 fps</option>
+                        <option value="24">24 fps</option>
+                        <option value="30">30 fps</option>
+                    </select>
+                </div>
+                
+                <div class="export-col" style="text-align:center; min-width:100px;">
+                    <div style="font-size:11px; color:#aaa;">Output</div>
+                    <div style="font-size:18px; font-weight:600; color:#4ade80;" id="previewAfterSkip">0</div>
+                    <div style="font-size:10px; color:#888;">frames</div>
+                    <div style="font-size:13px; color:#fff; margin-top:2px;" id="previewDuration">0s</div>
+                </div>
+                
+                <div class="export-col overlay-options">
+                    <label class="overlay-option">
+                        <input type="checkbox" id="addProgressMeter" checked>
+                        <span class="material-icons-outlined" style="font-size:16px; color:#4ade80;">donut_small</span>
+                        Add Progress Meter
+                    </label>
+                    <label class="overlay-option">
+                        <input type="checkbox" id="addClockFace" checked>
+                        <span class="material-icons-outlined" style="font-size:16px; color:#60a5fa;">schedule</span>
+                        Add Clock Face
+                    </label>
+                </div>
+                
+                <div class="export-actions">
+                    <div class="export-btns">
+                        <button class="export-btn mp4" onclick="createTimelapse('mp4')" id="exportMp4Btn" disabled>
+                            <span class="material-icons-outlined">movie</span> MP4
+                        </button>
+                        <button class="export-btn gif" onclick="createTimelapse('gif')" id="exportGifBtn" disabled>
+                            <span class="material-icons-outlined">gif_box</span> GIF
+                        </button>
+                    </div>
+                    <button class="save-schedule-btn" onclick="openSaveScheduleModal()" id="saveScheduleBtn" disabled>
+                        <span class="material-icons-outlined" style="font-size:18px;">event_repeat</span>
+                        Save as Schedule
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filmstrip Preview -->
+        <div class="filmstrip" id="filmstrip" style="display:none;">
+            <div class="filmstrip-title">Preview (sample frames with skip applied)</div>
+            <div class="filmstrip-frames" id="filmstripFrames"></div>
+        </div>
+        
+        <!-- Progress Bar for Export -->
+        <div id="exportProgress" class="export-progress" style="display:none;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                <span class="material-icons-outlined spinning" style="color:#4ade80;">movie_filter</span>
+                <div style="flex:1;">
+                    <div style="font-size:13px; color:#fff; margin-bottom:4px;">
+                        <span id="exportProgressText">Creating timelapse...</span>
+                        <span id="exportProgressPercent" style="float:right; color:#4ade80; font-weight:600;">0%</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div id="exportProgressBar" class="progress-bar"></div>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size:11px; color:#94a3b8;">
+                <span id="exportEta">Estimating time...</span>
+            </div>
+        </div>
+        
+        <!-- Gallery Section -->
+        <div class="gallery-section">
+            <div class="gallery-header">
+                <h3>
+                    <span class="material-icons-outlined" style="vertical-align: middle;">photo_library</span>
+                    Browse Frames <span id="browseInfo" style="color:#888; font-weight:normal;"></span>
+                </h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    {% if cam_id is not none %}
+                    <div class="mask-toggle-container">
+                        <label class="mask-toggle-label">
+                            <input type="checkbox" id="showMasks" onchange="toggleMaskView()">
+                            <span class="material-icons-outlined" style="font-size:16px;">nature</span>
+                            Show Segmentation Masks
+                        </label>
+                        <a href="/plant-tracking" class="generate-btn">
+                            <span class="material-icons-outlined" style="font-size:14px;">auto_awesome</span>
+                            Generate
+                        </a>
+                    </div>
+                    {% endif %}
+                    <button class="range-btn secondary" onclick="selectPage()">Select Page</button>
+                    <button class="range-btn secondary" onclick="invertSelection()">Invert</button>
+                </div>
+            </div>
+            
+            <div class="gallery-grid" id="gallery">
+                <div class="empty-state">
+                    <div class="icon"><span class="material-icons-outlined">hourglass_empty</span></div>
+                    <p>Loading images...</p>
+                </div>
+            </div>
+            
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+    
+    <!-- Preview Modal -->
+    <div class="preview-modal" id="previewModal" onclick="closePreview()">
+        <span class="preview-close">&times;</span>
+        <img id="previewImage" src="">
+    </div>
+    
+    <!-- Timelapse Gallery Tab -->
+    <div id="galleryTab" class="tab-content">
+        <div class="gallery-section" style="background:white; padding:20px; border-radius:12px;">
+            <div class="gallery-header" style="margin-bottom:20px;">
+                <h3 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px; color:#111827;">
+                    <span class="material-icons-outlined">movie_filter</span> Created Timelapses
+                </h3>
+                <div style="display:flex; gap:8px;">
+                    <button class="range-btn secondary" onclick="refreshGalleryView()">
+                        <span class="material-icons-outlined">refresh</span> Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div id="timelapseGalleryGrid" class="timelapse-gallery-grid">
+                <div class="empty-state">
+                    <div class="icon"><span class="material-icons-outlined" style="font-size:64px;">hourglass_empty</span></div>
+                    <p>Loading timelapses...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scheduled Timelapses Tab -->
+    <div id="schedulesTab" class="tab-content">
+        <div class="gallery-section">
+            <div class="gallery-header">
+                <h3><span class="material-icons-outlined">event_repeat</span> Scheduled Timelapses</h3>
+                <div style="display:flex; gap:8px;">
+                    <button class="range-btn secondary" onclick="refreshSchedulesView()">
+                        <span class="material-icons-outlined">refresh</span> Refresh
+                    </button>
+                    <button class="range-btn primary" onclick="openSaveScheduleModal()">
+                        <span class="material-icons-outlined">add</span> New Schedule
+                    </button>
+                </div>
+            </div>
+            
+            <div id="schedulesGrid" class="schedules-grid">
+                <div class="empty-state">
+                    <div class="icon"><span class="material-icons-outlined">hourglass_empty</span></div>
+                    <p>Loading schedules...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Video Player Modal -->
+    <div id="videoPlayerModal" class="video-player-modal" onclick="closeVideoPlayer()">
+        <div class="video-player-content" onclick="event.stopPropagation()">
+            <button onclick="closeVideoPlayer(); event.stopPropagation();" class="video-close-btn">&times;</button>
+            
+            <video id="timelapseVideo" controls style="display:none; width:100%; max-height:80vh; border-radius:8px;" preload="none"></video>
+            <img id="timelapseGif" style="width:100%; max-height:80vh; border-radius:8px; display:none;" alt="Timelapse GIF">
+            
+            <div class="video-info-container">
+                <div id="videoInfo" class="video-info"></div>
+                <div class="video-actions">
+                    <a id="downloadTimelapseBtn" href="" download="" class="download-btn">
+                        <span class="material-icons-outlined" style="font-size:20px;">download</span>
+                        Download
+                    </a>
+                    <button id="shareTimelapseBtn" onclick="openShareModal()" class="share-btn">
+                        <span class="material-icons-outlined" style="font-size:20px;">share</span>
+                        Share
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Save Schedule Modal -->
+    <div id="saveScheduleModal" class="schedule-modal" style="display:none;">
+        <div class="schedule-modal-content">
+            <div class="schedule-modal-header">
+                <h3>
+                    <span class="material-icons-outlined" style="color:#7c3aed;">event_repeat</span>
+                    Save as Scheduled Timelapse
+                </h3>
+                <button onclick="closeSaveScheduleModal()" class="modal-close-btn">&times;</button>
+            </div>
+            <p class="schedule-modal-subtitle">Create a recurring schedule using relative time windows</p>
+            
+            <div class="schedule-form-grid">
+                <div class="schedule-form-col">
+                    <div class="form-group">
+                        <label>Schedule Name</label>
+                        <input type="text" id="newScheduleName" placeholder="e.g., Daily Morning Timelapse">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Time Window (Rolling)</label>
+                        <select id="newScheduleTimeWindow">
+                            <option value="1">Last 1 hour</option>
+                            <option value="3">Last 3 hours</option>
+                            <option value="6">Last 6 hours</option>
+                            <option value="12">Last 12 hours</option>
+                            <option value="24" selected>Last 24 hours</option>
+                            <option value="48">Last 48 hours</option>
+                            <option value="72">Last 3 days</option>
+                            <option value="168">Last 7 days</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Run Every</label>
+                        <select id="newScheduleInterval">
+                            <option value="1">1 hour</option>
+                            <option value="3">3 hours</option>
+                            <option value="6">6 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24" selected>24 hours</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Frame Skip</label>
+                        <input type="number" id="newScheduleFrameSkip" value="1" min="1" max="100">
+                    </div>
+                </div>
+                
+                <div class="schedule-form-col">
+                    <div class="form-group">
+                        <label>Output FPS</label>
+                        <select id="newScheduleFps">
+                            <option value="5">5 fps</option>
+                            <option value="10">10 fps</option>
+                            <option value="15" selected>15 fps</option>
+                            <option value="24">24 fps</option>
+                            <option value="30">30 fps</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Output Format</label>
+                        <select id="newScheduleFormat">
+                            <option value="mp4" selected>MP4 Video</option>
+                            <option value="gif">GIF Animation</option>
+                        </select>
+                    </div>
+                    
+                    <div class="overlay-options-box">
+                        <div class="overlay-options-title">Overlay Options</div>
+                        <label class="overlay-option">
+                            <input type="checkbox" id="newScheduleProgressMeter" checked>
+                            <span class="material-icons-outlined" style="font-size:16px; color:#4ade80;">donut_small</span>
+                            Add Progress Meter
+                        </label>
+                        <label class="overlay-option">
+                            <input type="checkbox" id="newScheduleClockFace" checked>
+                            <span class="material-icons-outlined" style="font-size:16px; color:#60a5fa;">schedule</span>
+                            Add Clock Face
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="schedule-modal-footer">
+                <button onclick="closeSaveScheduleModal()" class="btn-secondary">Cancel</button>
+                <button onclick="confirmSaveSchedule()" class="btn-primary">
+                    <span class="material-icons-outlined" style="font-size:16px;">check_circle</span>
+                    Create Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Share Modal -->
+    <div id="shareModal" class="share-modal" style="display:none;" onclick="closeShareModal()">
+        <div class="share-modal-content" onclick="event.stopPropagation()">
+            <div class="share-modal-header">
+                <h2>Share Timelapse</h2>
+                <button onclick="closeShareModal()" class="modal-close-btn">&times;</button>
+            </div>
+            
+            <div class="share-modal-body">
+                <div id="shareFileInfo" class="share-file-info"></div>
+                
+                <div class="share-caption-group">
+                    <label>Optional Caption</label>
+                    <textarea id="shareCaption" rows="3" placeholder="🌱 Check out this timelapse! #timelapse #plants"></textarea>
+                </div>
+                
+                <div class="share-platforms">
+                    <button onclick="shareToTwitter()" class="share-platform-btn twitter">
+                        <span class="material-icons-outlined" style="font-size:32px;">alternate_email</span>
+                        <span>Share on X</span>
+                    </button>
+                    <button onclick="shareNative()" class="share-platform-btn native">
+                        <span class="material-icons-outlined" style="font-size:32px;">share</span>
+                        <span>Share File</span>
+                    </button>
+                    <button onclick="closeShareModal(); document.getElementById('downloadTimelapseBtn').click();" class="share-platform-btn download">
+                        <span class="material-icons-outlined" style="font-size:32px;">download</span>
+                        <span>Download</span>
+                    </button>
+                    <button onclick="copyShareLink()" class="share-platform-btn copy">
+                        <span class="material-icons-outlined" style="font-size:32px;">link</span>
+                        <span>Copy Link</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass Python variables to JavaScript
+    const camId = {{ cam_id|tojson }};
+    const cameras = {{ cameras|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
+{% endblock %}

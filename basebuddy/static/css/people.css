@@ -1,0 +1,6 @@
+.person-card { cursor: pointer; transition: transform 0.2s; }
+.person-card:hover { transform: scale(1.02); }
+.face-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; margin: 0 auto; display: block; }
+.cluster-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; margin: 2px; }
+/* Override Bootstrap container max-width to fit layout */
+.container { max-width: 100%; }

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}3D Multiview - BaseBuddy{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/multiview_3d.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">3D Plant Reconstruction</h1>
+    <p class="page-subtitle">Create 3D models of your plants using multiple camera views</p>
+</div>
+
+<div class="mv-tabs">
+    <button class="mv-tab active" data-tab="cameras">
+        <span class="material-icons-outlined icon-inline-md">videocam</span> Cameras
+    </button>
+    <button class="mv-tab" data-tab="info">
+        <span class="material-icons-outlined icon-inline-md">info</span> Info
+    </button>
+    <button class="mv-tab" data-tab="gallery">
+        <span class="material-icons-outlined icon-inline-md">collections</span> Gallery
+    </button>
+    <button class="mv-tab" data-tab="growth">
+        <span class="material-icons-outlined icon-inline-md">trending_up</span> Growth
+    </button>
+</div>
+
+<!-- CAMERAS TAB -->
+<div class="mv-tab-content active" data-tab-content="cameras">
+
+    <!-- Step 1: Camera Selection with Mask Overlays -->
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">videocam</span> Step 1: Select Cameras</h2>
+        <p class="text-muted mb-4">
+            Click cameras to select them. Segmentation masks are shown overlaid on previews when available.
+        </p>
+        <div id="cameraSelectionGrid" class="mv-camera-grid">
+            <div class="mv-loading-placeholder">
+                Loading cameras...
+            </div>
+        </div>
+        <div style="margin-top: 16px; display: flex; align-items: center; gap: 16px;">
+            <button class="btn btn-secondary" onclick="loadAvailableCameras()">
+                <span class="material-icons-outlined">refresh</span> Refresh
+            </button>
+            <span id="selectedCamerasCount" style="color: var(--text-secondary);"></span>
+        </div>
+    </div>
+
+    <!-- Step 2: Test Matching -->
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">compare</span> Step 2: Test Camera Overlap (Optional)</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 12px;">
+            Verify cameras have overlapping views before reconstruction:
+        </p>
+        <button class="btn btn-secondary" onclick="testMatchQuality()">
+            <span class="material-icons-outlined">search</span> Test Match Quality
+        </button>
+        <div id="matchTestResult" style="margin-top: 16px;"></div>
+    </div>
+
+    <!-- Step 3: Reconstruction -->
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">view_in_ar</span> Step 3: 3D Reconstruction</h2>
+
+        <div class="mv-recon-options">
+            <label class="mv-recon-field">
+                <span>Engine</span>
+                <select id="engineSelect" class="mv-engine-select">
+                    <option value="auto">Loading engines…</option>
+                </select>
+            </label>
+            <label class="mv-recon-check">
+                <input type="checkbox" id="useMasksCheckbox" checked>
+                Use plant masks
+            </label>
+        </div>
+
+        <div class="mv-action-buttons" style="margin-top: 16px;">
+            <button id="reconstructBtn" class="btn btn-success" onclick="startReconstruction()">
+                <span class="material-icons-outlined">rocket_launch</span>
+                Reconstruct in 3D
+            </button>
+        </div>
+
+        <p style="margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);">
+            <span id="cudaNote"></span>
+            Engine availability depends on which models are installed —
+            see the <a href="#" onclick="document.querySelector('.mv-tab[data-tab=info]').click(); return false;">Info tab</a> for details.
+        </p>
+
+        <div id="reconstructionMessage" style="margin-top: 16px;"></div>
+    </div>
+
+</div>
+
+<!-- INFO TAB -->
+<div class="mv-tab-content" data-tab-content="info">
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">info</span> About Multiview 3D Reconstruction</h2>
+
+        <div class="mv-info-box info">
+            <h3><span class="material-icons-outlined">help_outline</span> What is this?</h3>
+            <p>Create 3D models of your plants using multiple synchronized camera views. Perfect for tracking growth in three dimensions!</p>
+        </div>
+
+        <div class="mv-info-box info">
+            <h3><span class="material-icons-outlined">checklist</span> Requirements</h3>
+            <ul>
+                <li><strong>Cameras:</strong> Minimum 2, recommended 4 cameras viewing the same plant</li>
+                <li><strong>Timelapse:</strong> Enable timelapse capture so cameras have synchronized images</li>
+                <li><strong>Masks (optional):</strong> Create segmentation masks to focus on plant regions</li>
+            </ul>
+        </div>
+
+        <div class="mv-info-box success">
+            <h3><span class="material-icons-outlined">rocket_launch</span> Reconstruction Engines</h3>
+            <p>Modern feed-forward engines reconstruct dense point clouds from a handful of views with no calibration:</p>
+            <ul>
+                <li><strong>VGGT:</strong> Feed-forward transformer, fast and dense. Recommended when installed.</li>
+                <li><strong>&pi;&sup3; (Pi3):</strong> Permutation-equivariant feed-forward reconstruction.</li>
+                <li><strong>DUSt3R:</strong> Dense unconstrained stereo reconstruction, works with just 2 cameras.</li>
+                <li><strong>SfM:</strong> Classic feature matching + auto-calibration fallback, no ML models required.</li>
+                <li><strong>Auto:</strong> Picks the best available engine automatically.</li>
+            </ul>
+            <p>Engines that are not installed appear disabled in the engine selector.</p>
+        </div>
+
+        <div class="mv-info-box info">
+            <h3><span class="material-icons-outlined">trending_up</span> Growth Tracking Workflow</h3>
+            <ul>
+                <li>Create segmentation masks so reconstructions focus on the plant</li>
+                <li>Run a 3D reconstruction from the Cameras tab</li>
+                <li>Open it in the 3D viewer and set a real-world scale (measure a known object, e.g. the pot width)</li>
+                <li>Repeat over days — the Growth tab charts height and volume over time</li>
+            </ul>
+        </div>
+
+        <div class="mv-info-box info">
+            <h3><span class="material-icons-outlined">crop</span> Registration Regions</h3>
+            <p>Burned-in text (timestamps, camera-name banners, logos) looks identical across
+               views and gets falsely matched as shared 3D points. Use the "Regions" button on a
+               camera card to fix this:</p>
+            <ul>
+                <li><strong>Exclude boxes</strong> (red) are never used for registration — draw them over timestamps and logos</li>
+                <li><strong>Include boxes</strong> (green): if any exist, <em>only</em> those areas are used</li>
+                <li>Optionally restrict registration to the camera's saved segmentation mask</li>
+                <li>Exclude boxes always apply, even when "Use plant masks" is unchecked</li>
+            </ul>
+        </div>
+
+        <div class="mv-info-box info">
+            <h3><span class="material-icons-outlined">masks</span> About Segmentation Masks</h3>
+            <p>Masks help the system focus on the plant and ignore background:</p>
+            <ul>
+                <li>Click the "Mask" button on any camera card to create/edit a mask</li>
+                <li>Left-click on the plant (green = foreground)</li>
+                <li>Right-click on background (red = exclude)</li>
+                <li>Masks are shown overlaid on camera previews</li>
+                <li>Matching is constrained to masked regions for better accuracy</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- GALLERY TAB -->
+<div class="mv-tab-content" data-tab-content="gallery">
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">collections</span> Past Reconstructions</h2>
+        <div id="reconstructionsList">
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GROWTH TAB -->
+<div class="mv-tab-content" data-tab-content="growth">
+    <div class="mv-section">
+        <h2><span class="material-icons-outlined">trending_up</span> Plant Growth Over Time</h2>
+        <div id="growthContent">
+            <div class="mv-loading-placeholder">Loading growth data...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+    }
+}
+</script>
+<script type="module" src="{{ url_for('static', filename='js/multiview_viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/multiview_3d.js') }}"></script>
+{% endblock %}

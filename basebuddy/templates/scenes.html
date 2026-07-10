@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Home Scenes{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/scenes.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+    <h1 class="page-title">Home scenes</h1>
+    <p class="page-subtitle">
+        Monitor pantry shelves, fridge slots, and other fixed camera views.
+        Set a baseline when stocked; get alerts when a slot looks empty.
+    </p>
+</div>
+
+<div id="scenes-toast" class="scenes-toast" hidden></div>
+
+<section class="card">
+    <div class="card-header">
+        <span>Scenes</span>
+        <button type="button" class="btn btn-primary" id="scenes-add">
+            <span class="material-icons-outlined">add</span>
+            Add scene
+        </button>
+    </div>
+    <div id="scenes-list" class="scenes-list">
+        <p class="scenes-muted">Loading…</p>
+    </div>
+</section>
+
+<div id="scenes-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-add-modal">
+        <h2>Add scene</h2>
+        <form id="scenes-form" class="scenes-modal-scroll">
+            <label>Name<input type="text" name="name" required placeholder="Pantry top shelf"></label>
+            <label>Type
+                <select name="scene_type">
+                    <option value="pantry">Pantry</option>
+                    <option value="fridge">Fridge</option>
+                    <option value="shelf">Shelf</option>
+                </select>
+            </label>
+            <div class="scenes-field">
+                <span class="scenes-field-label">Camera</span>
+                <p class="scenes-form-hint">Live preview from the most recent frame. Cameras must be running on the Camera Wall.</p>
+                <div id="scene-camera-picker" class="scenes-camera-picker"></div>
+                <input type="hidden" name="camera_id" id="scene-camera-input">
+                <div id="scene-camera-live" class="scenes-camera-live hidden">
+                    <img id="scene-camera-live-img" alt="Camera preview">
+                    <p id="scene-camera-live-label" class="scenes-camera-live-label"></p>
+                </div>
+            </div>
+            <label>Check interval (seconds)<input type="number" name="check_interval_s" min="60" value="300"></label>
+        </form>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary" id="scenes-cancel">Cancel</button>
+            <button type="submit" form="scenes-form" class="btn btn-primary" id="scenes-submit">Create</button>
+        </div>
+    </div>
+</div>
+
+<div id="roi-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-roi-modal">
+        <h2 id="roi-modal-title">Add region</h2>
+        <p class="scenes-muted">Drag on the image to draw a region, then give it a label.</p>
+        <label class="scenes-roi-label-field">Region label
+            <input type="text" id="roi-label" placeholder="e.g. Oat milk, Top shelf left">
+        </label>
+        <div class="scenes-roi-wrap">
+            <canvas id="roi-canvas"></canvas>
+        </div>
+        <p id="roi-coords" class="scenes-muted"></p>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary" id="roi-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="roi-save">Save region</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/scenes.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Training{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/training.css') }}">
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1 class="page-title"><span class="material-icons-outlined">model_training</span> Training</h1>
+    <p class="page-subtitle">Build datasets from gallery labels, store locally or in your R2 bucket, then fine-tune locally or submit to BaseBuddy Cloud training.</p>
+</div>
+
+<div id="training-toast" class="training-toast" hidden></div>
+
+<section class="card training-stats-card">
+    <h2>Label flywheel</h2>
+    <div id="training-stats" class="training-stats-grid"><p class="muted">Loading…</p></div>
+    <p id="training-gpu" class="training-gpu muted"></p>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <span>Datasets</span>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-build-yolo">
+            <span class="material-icons-outlined icon-sm">folder</span> Build YOLO dataset
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-build-reid">
+            <span class="material-icons-outlined icon-sm">face</span> Build person re-ID pack
+        </button>
+    </div>
+    <div id="datasets-list" class="training-list"><p class="muted">Loading…</p></div>
+</section>
+
+<section class="card">
+    <div class="card-header"><span>Training jobs</span></div>
+    <div id="jobs-list" class="training-list"><p class="muted">Loading…</p></div>
+</section>
+
+<section class="card">
+    <div class="card-header"><span>False-positive ignore zones</span></div>
+    <p class="muted training-hint">Zones suppress future detections in the same screen region. Manage zones created from the gallery.</p>
+    <div id="fp-zones-list" class="training-fp-list"><p class="muted">Loading…</p></div>
+</section>
+
+<div id="build-modal" class="training-modal" hidden>
+    <div class="training-modal-inner card">
+        <h2 id="build-modal-title">Build dataset</h2>
+        <form id="build-form">
+            <input type="hidden" name="type" id="build-type" value="yolo">
+            <label>Name<input type="text" name="name" required placeholder="My custom detector dataset"></label>
+            <label>Lookback (hours)<input type="number" name="hours" value="8760" min="24"></label>
+            <label id="val-ratio-wrap">Validation split<input type="number" name="val_ratio" value="0.2" min="0.05" max="0.5" step="0.05"></label>
+            <label class="training-check" id="labeled-only-wrap"><input type="checkbox" name="labeled_only"> Labeled detections only</label>
+            <label class="training-check" id="neg-wrap"><input type="checkbox" name="include_negatives" checked> Include false-positive negatives</label>
+            <div class="training-modal-actions">
+                <button type="button" class="btn btn-secondary" id="build-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary">Build</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="train-modal" class="training-modal" hidden>
+    <div class="training-modal-inner card">
+        <h2>Start training</h2>
+        <form id="train-form">
+            <input type="hidden" name="dataset_id" id="train-dataset-id">
+            <label>Base model<input type="text" name="base_model" value="yolov8n.pt"></label>
+            <label>Epochs<input type="number" name="epochs" value="50" min="5" max="300"></label>
+            <label class="training-check"><input type="radio" name="mode" value="local" checked> Local GPU (Ultralytics)</label>
+            <label class="training-check"><input type="radio" name="mode" value="cloud" {% if not cloud_configured %}disabled{% endif %}> Cloud training service{% if not cloud_configured %} — configure INFERENCE_CLOUD_*{% endif %}</label>
+            <div class="training-modal-actions">
+                <button type="button" class="btn btn-secondary" id="train-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary">Start</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/training.js') }}"></script>
+{% endblock %}

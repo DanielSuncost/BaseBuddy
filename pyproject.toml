@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "basebuddy"
+version = "1.0.0"
+description = "AI-powered multi-camera surveillance with modular web UI"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+core = []
+ml = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["basebuddy*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

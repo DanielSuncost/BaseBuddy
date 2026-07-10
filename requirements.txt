@@ -1,0 +1,6 @@
+# BaseBuddy requirements
+# Core only:  pip install -r requirements-core.txt
+# With AI:     pip install -r requirements.txt
+
+-r requirements-core.txt
+-r requirements-ml.txt

@@ -1,0 +1,1 @@
+"""BaseBuddy application package."""

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Tracking Configuration{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Tracking Configuration</h1>
+    <p class="page-subtitle">Configure object tracking parameters for each camera</p>
+</div>
+
+<div id="statusMessage"></div>
+
+<div class="tracking-status">
+    <h3>Tracking Status</h3>
+    <div id="trackingStatus" class="status-grid">
+        <div class="status-item status-disabled">Loading...</div>
+    </div>
+</div>
+
+<div class="camera-tabs">
+    <button class="tab-btn active" onclick="showTab('global')">Global Settings</button>
+    {% for cam_id in camera_ids %}
+    <button class="tab-btn" onclick="showTab('camera{{ cam_id + 1 }}')">Camera {{ cam_id + 1 }}</button>
+    {% endfor %}
+</div>
+
+<div id="global" class="tab-content active">
+    <div class="config-section card">
+        <h3>Global Tracking Parameters</h3>
+        <div class="flex-group">
+            <div class="param-group">
+                <label for="global_max_age">Max Track Age (frames):</label>
+                <input type="number" id="global_max_age" value="30" min="1" max="300">
+                <small>How long to keep lost tracks (frames)</small>
+            </div>
+            <div class="param-group">
+                <label for="global_max_history">Max Track History:</label>
+                <input type="number" id="global_max_history" value="30" min="1" max="100">
+                <small>Maximum history points per track</small>
+            </div>
+        </div>
+        <div class="flex-group mt-20">
+            <div class="param-group">
+                <label for="global_cleanup_interval">Cleanup Interval (frames):</label>
+                <input type="number" id="global_cleanup_interval" value="10" min="1" max="100">
+                <small>How often to clean up old tracks</small>
+            </div>
+            <div class="param-group">
+                <label for="global_line_thickness">Line Thickness:</label>
+                <input type="number" id="global_line_thickness" value="2" min="1" max="10">
+                <small>Thickness of tracking paths</small>
+            </div>
+        </div>
+        <div class="flex-group mt-20">
+            <div class="param-group">
+                <label for="global_line_length">Line Length (points):</label>
+                <input type="number" id="global_line_length" value="20" min="1" max="100">
+                <small>How many points to show in path</small>
+            </div>
+            <div class="param-group" style="display: flex; align-items: flex-end;">
+                <button class="btn btn-primary" onclick="applyGlobalConfig()">Save Global Settings</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% for cam_id in camera_ids %}
+{% set i = cam_id + 1 %}
+<div id="camera{{ i }}" class="tab-content" style="display: none;" data-cam-id="{{ cam_id }}">
+    <div class="config-section card">
+        <h3>Camera {{ i }} Tracking Parameters</h3>
+        <div class="flex-group">
+            <div class="param-group">
+                <label for="cam{{ i }}_max_age">Max Track Age (frames):</label>
+                <input type="number" id="cam{{ i }}_max_age" value="30" min="1" max="300">
+            </div>
+            <div class="param-group">
+                <label for="cam{{ i }}_max_history">Max Track History:</label>
+                <input type="number" id="cam{{ i }}_max_history" value="30" min="1" max="100">
+            </div>
+        </div>
+        <div class="flex-group mt-20">
+            <div class="param-group">
+                <label for="cam{{ i }}_cleanup_interval">Cleanup Interval (frames):</label>
+                <input type="number" id="cam{{ i }}_cleanup_interval" value="10" min="1" max="100">
+            </div>
+            <div class="param-group">
+                <label for="cam{{ i }}_line_thickness">Line Thickness:</label>
+                <input type="number" id="cam{{ i }}_line_thickness" value="2" min="1" max="10">
+            </div>
+        </div>
+        <div class="flex-group mt-20">
+            <div class="param-group">
+                <label for="cam{{ i }}_line_length">Line Length (points):</label>
+                <input type="number" id="cam{{ i }}_line_length" value="20" min="1" max="100">
+            </div>
+            <div class="param-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                <button class="btn btn-success" onclick="applyCameraConfig({{ i - 1 }})">Save Camera {{ i }}</button>
+                <button class="btn btn-warning" onclick="clearCameraTracks({{ i - 1 }})">Clear Tracks</button>
+                <button class="btn btn-danger" onclick="resetCameraTracker({{ i - 1 }})">Reset Tracker</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/config_tracking.js') }}"></script>
+{% endblock %}

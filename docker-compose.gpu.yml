@@ -1,0 +1,17 @@
+# GPU override — use with: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+
+services:
+  basebuddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: basebuddy:1.0.0-gpu
+    environment:
+      - DETECTION_ENABLED=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

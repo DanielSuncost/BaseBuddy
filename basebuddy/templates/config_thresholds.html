@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Class Thresholds{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Class Thresholds</h1>
+    <p class="page-subtitle">Configure detection confidence thresholds per class and camera</p>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">Error: {{ error }}</div>
+{% else %}
+
+<div class="help-text">
+    <h4>How Thresholds Work</h4>
+    <p class="mb-0"><strong>Lower threshold</strong> (e.g., 0.1) = More detections but more false positives<br>
+    <strong>Higher threshold</strong> (e.g., 0.8) = Fewer detections but higher accuracy<br>
+    <strong>Recommended:</strong> Birds/Kites: 0.7+, People/Vehicles: 0.3-0.5, Other objects: 0.4-0.6</p>
+</div>
+
+<div id="statusMessage"></div>
+
+<div class="global-actions">
+    <h3>Quick Presets</h3>
+    <div class="preset-buttons">
+        <button class="preset-btn" onclick="applyPreset('conservative')">Conservative (High Accuracy)</button>
+        <button class="preset-btn" onclick="applyPreset('balanced')">Balanced (Recommended)</button>
+        <button class="preset-btn" onclick="applyPreset('sensitive')">Sensitive (More Detections)</button>
+        <button class="preset-btn reset" onclick="applyPreset('reset')">Reset All to Default</button>
+    </div>
+</div>
+
+{% for camera in cameras %}
+<div class="camera-section">
+    <h3>Camera {{ camera.id + 1 }} Thresholds</h3>
+    <div class="threshold-grid">
+        {% for cls in camera.classes %}
+        <div class="threshold-item">
+            <label for="threshold_{{ camera.id }}_{{ cls.name }}">{{ cls.name }}:</label>
+            <input type="number" id="threshold_{{ camera.id }}_{{ cls.name }}"
+                   name="threshold_{{ camera.id }}_{{ cls.name }}"
+                   value="{{ '%.2f'|format(cls.value) }}" min="0" max="1" step="0.01">
+            <span class="threshold-value">{{ '%.2f'|format(cls.value) }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="camera-actions">
+        <button class="btn btn-success" onclick="applyCameraThresholds({{ camera.id }})">Apply Camera {{ camera.id + 1 }} Thresholds</button>
+        <button class="btn btn-warning" onclick="resetCameraThresholds({{ camera.id }})">Reset to Default</button>
+    </div>
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/config.js') }}"></script>
+{% endblock %}

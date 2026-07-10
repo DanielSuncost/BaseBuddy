@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Plant Monitoring{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/scenes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/plants.css') }}">
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1 class="page-title"><span class="material-icons-outlined">local_florist</span> Plants</h1>
+    <p class="page-subtitle">
+        Scheduled captures with segmentation color tracking and optional vision AI analysis.
+        {% if plant_premium_available %}
+        <span class="plants-badge-premium">BaseBuddy Cloud plant AI active</span>
+        {% else %}
+        OSS: your vision API key + segmentation color trends. Premium adds species-tuned prompts.
+        {% endif %}
+    </p>
+</div>
+
+<div id="plants-toast" class="scenes-toast" hidden></div>
+
+<nav class="plants-tabs" aria-label="Plants sections">
+    <button type="button" class="tab-btn active" data-plants-tab="monitor">
+        <span class="material-icons-outlined">monitor_heart</span> Monitoring
+    </button>
+    <button type="button" class="tab-btn" data-plants-tab="blogger">
+        <span class="material-icons-outlined">rss_feed</span> Plant Blogger
+    </button>
+</nav>
+
+<div id="plants-panel-monitor">
+<section class="card plants-settings-card">
+    <h2 class="plants-section-title">Vision API <span class="plants-hint">optional — OpenAI-compatible</span></h2>
+    <div class="plants-settings-grid">
+        <label>API URL<input type="url" id="pv-url" placeholder="https://api.openai.com/v1/chat/completions"></label>
+        <label>Model<input type="text" id="pv-model" placeholder="gpt-4o-mini"></label>
+        <label>API key<input type="password" id="pv-key" autocomplete="off" placeholder="sk-…"></label>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" id="pv-save">Save API settings</button>
+    <p id="pv-status" class="plants-muted"></p>
+</section>
+
+<details class="card plants-actions-help">
+    <summary>Actions — pumps, lights, webhooks</summary>
+    <p class="plants-muted">
+        Hook any device via <strong>webhook</strong> (Shelly HTTP, IFTTT), <strong>MQTT</strong>
+        (Tasmota, Home Assistant, Zigbee2MQTT), or <strong>Home Assistant REST</strong>.
+        Configure per-plant actions in monitor JSON or upcoming UI — triggers: on sample, manual, water recommendation.
+    </p>
+    <ul class="plants-protocol-list">
+        <li>Shelly — <code>http://&lt;ip&gt;/relay/0?turn=on</code></li>
+        <li>Tasmota — MQTT <code>cmnd/device/POWER ON</code></li>
+        <li>Home Assistant — <code>/api/services/switch/turn_on</code></li>
+    </ul>
+</details>
+
+<section class="card">
+    <div class="card-header">
+        <span>Monitored plants</span>
+        <button type="button" class="btn btn-primary" id="plants-add">
+            <span class="material-icons-outlined">add</span> Add plant
+        </button>
+    </div>
+    <div id="plants-list" class="plants-list">
+        <p class="scenes-muted">Loading…</p>
+    </div>
+</section>
+</div>
+
+<div id="plants-panel-blogger" hidden>
+<section class="card plants-blogger-intro">
+    <h2 class="plants-section-title">Automated plant posts</h2>
+    <p class="plants-muted">
+        Publish a fresh camera snapshot and status update on a schedule to a blog, Mastodon, Bluesky,
+        Telegram, WordPress, webhook (IFTTT, Zapier, Node-RED), or MQTT.
+        Set <code>NOTIFY_PUBLIC_BASE_URL</code> in Integrations so image links work in posts.
+    </p>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <span>Post channels</span>
+        <button type="button" class="btn btn-primary" id="blogger-add">
+            <span class="material-icons-outlined">add</span> New channel
+        </button>
+    </div>
+    <div id="blogger-list" class="plants-list">
+        <p class="scenes-muted">Loading…</p>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-header"><span>Recent posts</span></div>
+    <div id="blogger-history" class="blogger-history">
+        <p class="scenes-muted">Loading…</p>
+    </div>
+</section>
+</div>
+
+<div id="plants-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-add-modal">
+        <h2>Add plant monitor</h2>
+        <form id="plants-form" class="scenes-modal-scroll">
+            <label>Name<input type="text" name="name" required placeholder="Kitchen monstera"></label>
+            <label>Species hint <span class="setup-optional">optional</span>
+                <input type="text" name="species_hint" placeholder="Monstera deliciosa">
+            </label>
+            <div class="scenes-field">
+                <span class="scenes-field-label">Camera</span>
+                <div id="plant-camera-picker" class="scenes-camera-picker"></div>
+                <input type="hidden" name="camera_id" id="plant-camera-input">
+            </div>
+            <label>Schedule mode
+                <select name="schedule_mode" id="plant-schedule-mode">
+                    <option value="interval">Every N seconds</option>
+                    <option value="times">Daily at specific times</option>
+                </select>
+            </label>
+            <label id="plant-interval-wrap">Interval (seconds)
+                <input type="number" name="check_interval_s" min="300" value="3600">
+            </label>
+            <label id="plant-times-wrap" hidden>Daily times (comma-separated, 24h)
+                <input type="text" name="schedule_times" placeholder="08:00, 18:00">
+            </label>
+            <p class="plants-muted">After creating, use <strong>Set plant region</strong> on the card to click-segment the plant (left = plant, right = background).</p>
+            <label>Pattern index <span class="setup-optional">optional — advanced</span>
+                <input type="number" name="pattern_id" min="-1" value="-1" placeholder="-1 = latest">
+            </label>
+        </form>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary" id="plants-cancel">Cancel</button>
+            <button type="submit" form="plants-form" class="btn btn-primary">Create</button>
+        </div>
+    </div>
+</div>
+
+<div id="blogger-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-add-modal blogger-modal">
+        <h2 id="blogger-modal-title">New post channel</h2>
+        <form id="blogger-form" class="scenes-modal-scroll">
+            <input type="hidden" name="channel_id" id="blogger-channel-id">
+            <label>Channel name<input type="text" name="name" required placeholder="Weekly monstera blog"></label>
+            <label>Plant monitor
+                <select name="monitor_id" id="blogger-monitor-select" required></select>
+            </label>
+            <label class="blogger-check"><input type="checkbox" name="enabled" id="blogger-enabled" checked> Enabled</label>
+
+            <h3 class="blogger-form-section">Posting schedule</h3>
+            <label>Schedule mode
+                <select name="schedule_mode" id="blogger-schedule-mode">
+                    <option value="interval">Every N hours/days</option>
+                    <option value="times">Daily at specific times</option>
+                </select>
+            </label>
+            <label id="blogger-interval-wrap">Interval (seconds)
+                <input type="number" name="interval_s" min="3600" value="86400">
+                <span class="plants-hint">86400 = once per day</span>
+            </label>
+            <label id="blogger-times-wrap" hidden>Daily times (comma-separated, 24h)
+                <input type="text" name="schedule_times" placeholder="09:00, 18:00">
+            </label>
+
+            <h3 class="blogger-form-section">Destination</h3>
+            <label>Platform
+                <select name="dest_type" id="blogger-dest-type">
+                    <option value="webhook">Webhook (IFTTT, Zapier, custom)</option>
+                    <option value="mastodon">Mastodon</option>
+                    <option value="wordpress">WordPress</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="bluesky">Bluesky</option>
+                    <option value="mqtt">MQTT</option>
+                </select>
+            </label>
+            <div id="blogger-dest-fields" class="blogger-dest-fields"></div>
+
+            <h3 class="blogger-form-section">Content to include</h3>
+            <div class="blogger-content-grid">
+                <label class="blogger-check"><input type="checkbox" name="include_image" checked> Camera photo</label>
+                <label class="blogger-check"><input type="checkbox" name="include_health_score" checked> Health score</label>
+                <label class="blogger-check"><input type="checkbox" name="include_summary" checked> AI summary</label>
+                <label class="blogger-check"><input type="checkbox" name="include_species" checked> Species hint</label>
+                <label class="blogger-check"><input type="checkbox" name="include_greenness"> Greenness index</label>
+                <label class="blogger-check"><input type="checkbox" name="include_coverage"> Plant coverage %</label>
+                <label class="blogger-check"><input type="checkbox" name="include_recommendations"> Care tips</label>
+                <label class="blogger-check"><input type="checkbox" name="run_vision_before_post" checked> Run vision AI before post</label>
+            </div>
+            <label>Post title <span class="setup-optional">blog / WordPress</span>
+                <input type="text" name="title_template" value="{{monitor_name}} update — {{date}}">
+            </label>
+            <label>Custom intro <span class="setup-optional">optional</span>
+                <input type="text" name="custom_intro" placeholder="Good morning from the plant cam!">
+            </label>
+            <label>Hashtags <span class="setup-optional">optional</span>
+                <input type="text" name="hashtags" placeholder="#plantcam #monstera">
+            </label>
+            <label>Custom caption template <span class="setup-optional">optional — overrides auto caption</span>
+                <textarea name="caption_template" rows="3" placeholder="{{monitor_name}} is at {{health_score}}/100 today. {{summary}}"></textarea>
+            </label>
+            <p class="plants-muted">Template vars: <code>{{monitor_name}}</code> <code>{{health_score}}</code> <code>{{summary}}</code> <code>{{greenness}}</code> <code>{{date}}</code></p>
+        </form>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary" id="blogger-cancel">Cancel</button>
+            <button type="submit" form="blogger-form" class="btn btn-primary" id="blogger-save">Save channel</button>
+        </div>
+    </div>
+</div>
+
+<div id="blogger-preview-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-add-modal">
+        <h2>Post preview</h2>
+        <div id="blogger-preview-body" class="blogger-preview-body"></div>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary" id="blogger-preview-close">Close</button>
+        </div>
+    </div>
+</div>
+
+<div id="plant-segment-modal" class="scenes-modal" hidden>
+    <div class="scenes-modal-inner card scenes-add-modal plant-segment-modal">
+        <h2><span class="material-icons-outlined">masks</span> Set plant region</h2>
+        <p class="plants-segment-hint">
+            <span class="plant-hint-fg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Left-click</span> on the plant ·
+            <span class="plant-hint-bg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Right-click</span> on background
+        </p>
+        <div class="plant-segment-canvas-wrap">
+            <canvas id="plant-segment-canvas"></canvas>
+            <div id="plant-segment-loading" class="plant-segment-loading" hidden>Loading frame…</div>
+        </div>
+        <p id="plant-segment-status" class="plants-muted plant-segment-status"></p>
+        <div class="scenes-modal-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="plant-segment-reset">
+                <span class="material-icons-outlined icon-sm">refresh</span> Reset
+            </button>
+            <span class="plant-segment-spacer"></span>
+            <button type="button" class="btn btn-secondary" id="plant-segment-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="plant-segment-save">
+                <span class="material-icons-outlined icon-sm">save</span> Save region
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/plants_color_viz.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plant_segment_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plants_blogger.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plants.js') }}"></script>
+{% endblock %}

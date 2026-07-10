@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Camera Wall{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/camera_wall.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- Camera Profile Modal -->
+<div class="modal fade" id="cameraProfileModal" tabindex="-1" aria-labelledby="profileModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content modern-modal">
+            <div class="modal-header modern-modal-header">
+                <div class="modal-icon-wrapper">
+                    <span class="material-icons-outlined">settings</span>
+                </div>
+                <div class="modal-title-wrapper">
+                    <h5 class="modal-title" id="profileModalTitle">Camera Profile</h5>
+                    <p class="modal-subtitle">Configure camera settings</p>
+                </div>
+                <button type="button" class="btn-close btn-close-white" onclick="closeCameraProfileModal()" aria-label="Close"></button>
+            </div>
+            <div class="modal-body modern-modal-body">
+                <form id="cameraProfileForm">
+                    <input type="hidden" id="profileCameraId" />
+                    <input type="hidden" id="profileCameraEnabled" value="true" />
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">
+                            <span class="label-icon"><span class="material-icons-outlined">badge</span></span>
+                            Camera Name
+                        </label>
+                        <input type="text" class="form-control-modern" id="profileCameraName" placeholder="e.g., Front Door Camera">
+                    </div>
+                    <div class="form-group-modern">
+                        <label class="form-label-modern">
+                            <span class="label-icon"><span class="material-icons-outlined">category</span></span>
+                            Purpose
+                        </label>
+                        <input type="text" class="form-control-modern" id="profilePurpose" placeholder="e.g., Security, Monitoring, Traffic">
+                    </div>
+                    <div class="form-group-modern">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="profileDetectionEnabled" checked>
+                            <label class="form-check-label" for="profileDetectionEnabled">
+                                <strong>Enable Detection</strong>
+                                <small class="form-text text-muted d-block">Run object detection on this camera</small>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer modern-modal-footer">
+                <button type="button" class="btn btn-secondary me-auto" onclick="editCamera(parseInt(document.getElementById('profileCameraId').value))">
+                    <span class="material-icons-outlined">link</span> Edit URL / Stream
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeCameraProfileModal()">
+                    <span class="material-icons-outlined">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveCameraProfile(); return false;">
+                    <span class="material-icons-outlined">save</span> Save Profile
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Camera Modal -->
+<div class="modal fade" id="addCameraModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg wall-modal-dialog">
+        <div class="modal-content modern-modal">
+            <div class="modal-header modern-modal-header">
+                <div class="modal-icon-wrapper">
+                    <span class="material-icons-outlined">videocam</span>
+                </div>
+                <div class="modal-title-wrapper">
+                    <h5 class="modal-title">Add Camera</h5>
+                    <p class="modal-subtitle">Add a camera to your wall</p>
+                </div>
+                <button type="button" class="btn-close btn-close-white" onclick="closeAddCameraModal()" aria-label="Close"></button>
+            </div>
+            <div class="modal-body modern-modal-body wall-modal-body">
+                <div id="savedCamerasSection" class="saved-cameras-section" style="display:none">
+                    <button type="button" class="saved-cameras-toggle" onclick="toggleSavedCameras()">
+                        <div class="saved-cameras-toggle-left">
+                            <span class="material-icons-outlined">history</span>
+                            <span class="saved-cameras-toggle-title">Saved Cameras</span>
+                            <span id="savedCamerasCount" class="saved-cameras-count">0</span>
+                        </div>
+                        <span class="material-icons-outlined saved-cameras-chevron" id="savedCamerasToggleIcon">expand_more</span>
+                    </button>
+                    <div id="savedCamerasCollapse" class="saved-cameras-collapse" style="display:none">
+                        <div id="savedCamerasList" class="saved-cameras-list"></div>
+                    </div>
+                </div>
+
+                <div class="form-group-spaced">
+                    <label class="form-label-icon" for="cameraName">
+                        <span class="material-icons-outlined">badge</span>
+                        Camera Name <span class="optional">(Optional)</span>
+                    </label>
+                    <input type="text" class="form-control-modern" id="cameraName" placeholder="e.g., Front Door Camera">
+                </div>
+
+                <div class="form-group-spaced">
+                    <label class="form-label-icon" for="cameraGroup">
+                        <span class="material-icons-outlined">folder</span>
+                        Group <span class="optional">(Optional)</span>
+                    </label>
+                    <select class="form-control-modern" id="cameraGroup">
+                        <option value="">No Group</option>
+                    </select>
+                    <small class="form-hint-block">Organize cameras into groups for easier management</small>
+                </div>
+
+                <div class="form-group-spaced">
+                    <label class="form-label-icon" for="cameraStreamType">
+                        <span class="material-icons-outlined">stream</span>
+                        Stream Type <span class="required">*</span>
+                    </label>
+                    <select class="form-control-modern" id="cameraStreamType" onchange="updateCameraUrlPlaceholder()">
+                        <option value="rtsp">RTSP Stream</option>
+                        <option value="mjpeg">HTTP MJPEG Stream</option>
+                        <option value="still">HTTP Still Images</option>
+                    </select>
+                    <small class="form-hint-block" id="streamTypeHint">Standard camera protocol for continuous video streaming</small>
+                </div>
+
+                <div class="form-group-spaced">
+                    <label class="form-label-icon" for="cameraUrl">
+                        <span class="material-icons-outlined">link</span>
+                        <span id="urlLabel">RTSP URL</span> <span class="required">*</span>
+                    </label>
+                    <input type="text" class="form-control-modern" id="cameraUrl" placeholder="rtsp://username:password@192.168.1.100:554/stream1" required>
+                    <small class="form-hint-block" id="urlHint">rtsp://username:password@192.168.1.100:554/stream1</small>
+                </div>
+
+                <div class="form-group-spaced" id="pollRateGroup" style="display:none">
+                    <label class="form-label-icon" for="cameraPollRate">
+                        <span class="material-icons-outlined">schedule</span>
+                        Polling Rate <span class="optional">(Still Images)</span>
+                    </label>
+                    <div class="poll-rate-row">
+                        <input type="range" class="form-control-modern" id="cameraPollRate" min="0.5" max="3600" step="0.5" value="2" oninput="updatePollRateDisplay()">
+                        <div class="poll-rate-display" id="pollRateDisplay">2s</div>
+                    </div>
+                </div>
+
+                <div class="info-banner">
+                    <span class="material-icons-outlined">info</span>
+                    <p id="infoTip">After adding a camera, restart the app to connect to the stream.</p>
+                </div>
+            </div>
+            <div class="modal-footer modern-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeAddCameraModal()">
+                    <span class="material-icons-outlined">close</span> Cancel
+                </button>
+                <button type="button" id="addCameraSubmitBtn" class="btn btn-primary" onclick="addCamera(); return false;">
+                    <span class="material-icons-outlined">add</span> Add Camera
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="wall-container">
+    <div class="wall-header">
+        <div class="wall-title-section">
+            <div class="wall-title">
+                <span class="material-icons-outlined">grid_view</span>
+                Camera Wall
+            </div>
+            <div class="group-buttons" id="group-buttons">
+                <button class="group-btn active" data-group="all" onclick="selectGroup('all')">
+                    <span class="material-icons-outlined">apps</span>
+                    <span class="group-name">All</span>
+                </button>
+            </div>
+        </div>
+        <div class="wall-actions">
+            <button class="wall-action-btn" id="viewGridBtn" onclick="setWallView('grid')" title="Grid view">
+                <span class="material-icons-outlined">grid_view</span>
+            </button>
+            <button class="wall-action-btn" id="viewBirdseyeBtn" onclick="setWallView('birdseye')" title="Birdseye — all cameras">
+                <span class="material-icons-outlined">dashboard</span>
+            </button>
+            <button class="wall-action-btn" onclick="openGroupManager()" title="Manage Groups">
+                <span class="material-icons-outlined">folder_special</span>
+            </button>
+            <span class="wall-hint">Click camera for detection view</span>
+            <button class="wall-action-btn wall-add-btn" onclick="openAddCameraModal()" title="Add Camera">
+                <span class="material-icons-outlined">add</span>
+            </button>
+        </div>
+    </div>
+    <div class="grid" id="camera-grid">
+        <!-- Cameras will be loaded dynamically -->
+    </div>
+    <div class="birdseye-wrap" id="birdseye-wrap" hidden>
+        <canvas id="birdseye-canvas"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/state.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/streams.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/groups.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/tiles.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera_wall/actions.js') }}"></script>
+{% endblock %}

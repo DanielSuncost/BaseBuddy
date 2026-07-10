@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% block title %}Storage{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/storage_policy.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<div id="sp-toast" class="sp-toast" hidden></div>
+
+<!-- Disk / retention warnings (filled by JS from measured write rates) -->
+<div id="sp-alerts" class="sp-alerts" hidden aria-live="polite"></div>
+
+<!-- Premium hero -->
+<section class="sp-hero" id="sp-hero">
+    <div class="sp-hero-inner">
+        <div class="sp-hero-copy">
+            <span class="sp-hero-badge">Premium</span>
+            <h1 class="sp-hero-title" id="sp-premium-headline">BaseBuddy Cloud</h1>
+            <p class="sp-hero-lead" id="sp-premium-tagline">Managed cloud storage for your cameras</p>
+            <div class="sp-hero-cta">
+                <a href="#" id="sp-premium-signup" class="btn btn-primary sp-btn-light" target="_blank" rel="noopener">Get started</a>
+                <a href="#" id="sp-premium-cta" class="btn btn-secondary sp-btn-ghost" target="_blank" rel="noopener">Pricing</a>
+            </div>
+            <p id="sp-premium-status" class="sp-hero-status" hidden></p>
+        </div>
+        <div class="sp-hero-cloud" id="sp-cloud-meter" hidden>
+            <div class="sp-cloud-meter-label">Your cloud usage</div>
+            <div class="sp-cloud-meter-bar"><div class="sp-cloud-meter-fill" id="sp-cloud-meter-fill"></div></div>
+            <div class="sp-cloud-meter-text" id="sp-cloud-meter-text">—</div>
+        </div>
+    </div>
+
+    <p class="sp-hero-plan-label">Choose a plan</p>
+    <div class="sp-plan-toggle" role="tablist" aria-label="Plan type">
+        <button type="button" class="sp-plan-tab active" data-plan="storage" role="tab">Cloud storage</button>
+        <button type="button" class="sp-plan-tab" data-plan="inference" role="tab">Cloud storage + AI inference</button>
+    </div>
+
+    <div class="sp-tier-grid" id="sp-tier-grid"></div>
+    <p class="sp-hero-footnote" id="sp-premium-footnote">
+        Cloud days and tier fit are configured in the storage planner below.
+    </p>
+
+    <details class="sp-hero-details">
+        <summary>What is a cloud buffer?</summary>
+        <ul id="sp-quota-policy" class="sp-bullet-list"></ul>
+    </details>
+</section>
+
+<!-- Usage strip -->
+<section class="sp-usage-strip card">
+    <div class="sp-usage-item">
+        <span class="material-icons-outlined">folder</span>
+        <div>
+            <div class="sp-usage-label">Local media</div>
+            <div class="sp-usage-value" id="sp-local-total">—</div>
+        </div>
+    </div>
+    <div class="sp-usage-item">
+        <span class="material-icons-outlined">hard_drive</span>
+        <div>
+            <div class="sp-usage-label">Disk</div>
+            <div class="sp-usage-value" id="sp-sys-disk">—</div>
+        </div>
+    </div>
+    <div class="sp-usage-item">
+        <span class="material-icons-outlined">speed</span>
+        <div>
+            <div class="sp-usage-label">Local cap</div>
+            <div class="sp-usage-value" id="sp-quota">—</div>
+        </div>
+    </div>
+    <div class="sp-usage-item">
+        <span class="material-icons-outlined">cloud</span>
+        <div>
+            <div class="sp-usage-label">Backend</div>
+            <div class="sp-usage-value" id="sp-remote-status">—</div>
+        </div>
+    </div>
+    <button type="button" class="btn btn-secondary sp-refresh-btn" id="sp-refresh" title="Refresh">
+        <span class="material-icons-outlined">refresh</span>
+    </button>
+</section>
+
+<!-- Actual usage by media type -->
+<section class="card sp-usage-panel" id="sp-usage-panel">
+    <div class="sp-usage-panel-head">
+        <div>
+            <h2 class="sp-section-title sp-usage-panel-title">Storage by type</h2>
+            <p class="sp-section-lead sp-usage-panel-lead">
+                Measured on disk now — local folders on this server vs objects in your cloud bucket.
+            </p>
+        </div>
+        <div class="sp-usage-panel-totals">
+            <div class="sp-usage-panel-total">
+                <span class="sp-usage-panel-total-label">Local total</span>
+                <strong id="sp-breakdown-local-total">—</strong>
+            </div>
+            <div class="sp-usage-panel-total">
+                <span class="sp-usage-panel-total-label">Cloud total</span>
+                <strong id="sp-breakdown-cloud-total">—</strong>
+            </div>
+        </div>
+    </div>
+    <div class="sp-usage-table-wrap">
+        <table class="sp-usage-table" id="sp-usage-table" aria-describedby="sp-usage-footnote">
+            <thead>
+                <tr>
+                    <th scope="col">Media type</th>
+                    <th scope="col" class="sp-col-local">Local (this server)</th>
+                    <th scope="col" class="sp-col-cloud">Cloud</th>
+                    <th scope="col" class="sp-col-policy">Retention</th>
+                </tr>
+            </thead>
+            <tbody id="sp-usage-table-body">
+                <tr><td colspan="4" class="sp-usage-loading">Loading usage…</td></tr>
+            </tbody>
+            <tfoot id="sp-usage-table-foot" hidden></tfoot>
+        </table>
+    </div>
+    <p class="sp-usage-footnote" id="sp-usage-footnote"></p>
+</section>
+
+<!-- Write rates + disk fill forecast -->
+<section class="card sp-forecast-panel" id="sp-forecast-panel">
+    <div class="sp-forecast-head">
+        <div>
+            <h2 class="sp-section-title">Write rates &amp; disk forecast</h2>
+            <p class="sp-section-lead">
+                Measured from your cameras, detection database, and on-disk files — updates when you refresh.
+            </p>
+        </div>
+        <div class="sp-forecast-summary" id="sp-forecast-summary">
+            <div class="sp-forecast-stat">
+                <span class="sp-forecast-stat-label">Ingest</span>
+                <strong id="sp-ingest-rate">—</strong>
+            </div>
+            <div class="sp-forecast-stat">
+                <span class="sp-forecast-stat-label">Steady-state media</span>
+                <strong id="sp-steady-state">—</strong>
+            </div>
+            <div class="sp-forecast-stat">
+                <span class="sp-forecast-stat-label">Time to full disk</span>
+                <strong id="sp-days-until-full">—</strong>
+            </div>
+        </div>
+    </div>
+    <div class="sp-usage-table-wrap">
+        <table class="sp-usage-table sp-forecast-table" id="sp-forecast-table">
+            <thead>
+                <tr>
+                    <th scope="col">Media type</th>
+                    <th scope="col">Write rate</th>
+                    <th scope="col">Now on disk</th>
+                    <th scope="col">At retention limit</th>
+                    <th scope="col">Keep policy</th>
+                </tr>
+            </thead>
+            <tbody id="sp-forecast-table-body">
+                <tr><td colspan="5" class="sp-usage-loading">Measuring rates…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="sp-usage-footnote" id="sp-forecast-footnote">
+        Steady-state = write rate × local retention days. Retention deletes by age, not free space — if this total exceeds your disk, you will fill up even while cleanup runs.
+    </p>
+</section>
+
+<!-- Per-camera detection ranking -->
+<section class="card sp-camera-rank-panel" id="sp-camera-rank-panel" hidden>
+    <div class="sp-forecast-head">
+        <div>
+            <h2 class="sp-section-title">Cameras driving detections</h2>
+            <p class="sp-section-lead" id="sp-camera-rank-lead">
+                Ranked by detection volume — filter or disable the noisiest cameras to free the most disk.
+            </p>
+        </div>
+    </div>
+    <div id="sp-camera-recommendations" class="sp-camera-recs" hidden></div>
+    <div class="sp-usage-table-wrap">
+        <table class="sp-usage-table" id="sp-camera-rank-table">
+            <thead>
+                <tr>
+                    <th scope="col">Camera</th>
+                    <th scope="col">Share</th>
+                    <th scope="col">Detections / day</th>
+                    <th scope="col">Est. disk</th>
+                    <th scope="col">Top classes</th>
+                    <th scope="col">Clear</th>
+                </tr>
+            </thead>
+            <tbody id="sp-camera-rank-body">
+                <tr><td colspan="6" class="sp-usage-loading">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="sp-usage-footnote">
+        Share is from the last 7 days of events. Est. disk apportions detection write rate by share.
+        <strong>Clear</strong> permanently deletes that camera’s detection gallery images and DB rows (not recordings or stills).
+        Tune thresholds on the <a href="/config">Config</a> page.
+    </p>
+</section>
+
+<form id="sp-form" class="sp-form">
+
+    <!-- Storage planner: local + cloud side by side -->
+    <section class="card sp-planner">
+        <div class="sp-planner-header">
+            <h2 class="sp-section-title">Storage planner</h2>
+            <p class="sp-section-lead">Set how many days to keep each type of media. Space estimates update as you edit.</p>
+            <p class="sp-timelapse-hint" id="sp-timelapse-hint">
+                <a href="/timelapse">Timelapse settings</a> control capture intervals used in estimates.
+            </p>
+        </div>
+
+        <div class="sp-planner-grid">
+            <div class="sp-planner-col">
+                <div class="sp-planner-col-head">
+                    <span class="material-icons-outlined">storage</span>
+                    <div>
+                        <h3>On this server</h3>
+                        <p>Short-term cache before upload or delete</p>
+                    </div>
+                </div>
+                <div class="sp-planner-rows" id="sp-local-rows"></div>
+                <div class="sp-planner-total">
+                    <span>Estimated on disk</span>
+                    <strong id="sp-local-est">—</strong>
+                </div>
+                <label class="sp-compact-field">
+                    <span>Disk soft cap (GiB)</span>
+                    <input type="number" name="STORAGE_QUOTA_GB" id="STORAGE_QUOTA_GB" min="0" max="100000" step="1" title="0 = no cap">
+                </label>
+                <label class="sp-compact-field">
+                    <span>Min free disk (GiB)</span>
+                    <input type="number" name="DISK_FREE_MIN_GB" id="DISK_FREE_MIN_GB" min="0" max="500" step="1" title="When free space drops below this, delete oldest detections/stills even if younger than retention days. 0 = off">
+                </label>
+            </div>
+
+            <div class="sp-planner-col sp-planner-cloud">
+                <div class="sp-planner-col-head">
+                    <span class="material-icons-outlined">cloud</span>
+                    <div>
+                        <h3>In the cloud</h3>
+                        <p>Rolling buffer — old files drop off automatically</p>
+                    </div>
+                </div>
+
+                <div class="sp-dest-pills" role="radiogroup" aria-label="Cloud destination">
+                    <label class="sp-dest-pill"><input type="radio" name="remote_mode" value="none" checked><span>Off</span></label>
+                    <label class="sp-dest-pill"><input type="radio" name="remote_mode" value="managed" disabled><span>BaseBuddy Cloud</span></label>
+                    <label class="sp-dest-pill"><input type="radio" name="remote_mode" value="byo"><span>My bucket</span></label>
+                </div>
+
+                <div class="sp-planner-rows" id="sp-cloud-rows"></div>
+                <div class="sp-planner-total">
+                    <span>Estimated in cloud</span>
+                    <strong id="sp-cloud-est">—</strong>
+                </div>
+                <div class="sp-tier-suggest" id="sp-tier-suggest" hidden></div>
+            </div>
+        </div>
+    </section>
+
+    <details class="card sp-section sp-details-card">
+        <summary class="sp-section-title sp-details-summary">Advanced paths &amp; scan interval</summary>
+        <div class="sp-details-body sp-field-row">
+            <div class="sp-field">
+                <label for="RECORD_ROOT">Recordings folder</label>
+                <input type="text" name="RECORD_ROOT" id="RECORD_ROOT" autocomplete="off">
+            </div>
+            <div class="sp-field sp-field-inline">
+                <label for="RETENTION_SCAN_HOURS">Retention scan (hours)</label>
+                <input type="number" name="RETENTION_SCAN_HOURS" id="RETENTION_SCAN_HOURS" min="1" max="168" step="1" value="1">
+            </div>
+        </div>
+    </details>
+
+    <details class="card sp-section sp-details-card" id="sp-cloud-connect-details">
+        <summary class="sp-section-title sp-details-summary">Cloud connection</summary>
+        <div class="sp-details-body">
+            <div id="sp-panel-managed" class="sp-config-panel" hidden>
+                <p class="sp-note" id="sp-premium-install-hint" hidden>
+                    Install the premium client: <code>pip install -e ./premium</code>
+                </p>
+                <p id="sp-premium-active" class="sp-connected" hidden>
+                    <span class="material-icons-outlined">check_circle</span> Connected to BaseBuddy Cloud
+                </p>
+                <div class="sp-field">
+                    <label for="BASEBUDDY_CLOUD_API_URL">Cloud API URL</label>
+                    <input type="url" name="BASEBUDDY_CLOUD_API_URL" id="BASEBUDDY_CLOUD_API_URL" placeholder="https://your-worker.workers.dev">
+                </div>
+                <div class="sp-field">
+                    <label for="BASEBUDDY_CLOUD_API_KEY">API key</label>
+                    <input type="password" name="BASEBUDDY_CLOUD_API_KEY" id="BASEBUDDY_CLOUD_API_KEY" autocomplete="new-password" placeholder="bb_live_…">
+                    <span class="sp-hint" id="sp-cloud-key-mask"></span>
+                </div>
+                <button type="button" class="btn btn-secondary" id="sp-test-managed">
+                    <span class="material-icons-outlined">cloud_done</span>
+                    Test connection
+                </button>
+                <details class="sp-inline-help" id="cloud-account">
+                    <summary>Lost your API key?</summary>
+                    <p id="sp-premium-lost-key"></p>
+                    <p>
+                        <a href="#" id="sp-premium-account-link" target="_blank" rel="noopener">Account &amp; billing</a>
+                        ·
+                        <a href="#" id="sp-premium-support-link" target="_blank" rel="noopener">Support</a>
+                    </p>
+                </details>
+            </div>
+            <div id="sp-panel-byo" class="sp-config-panel" hidden>
+                <div class="sp-toggle">
+                    <label class="sp-switch">
+                        <input type="checkbox" name="REMOTE_STORAGE_ENABLED" id="REMOTE_STORAGE_ENABLED">
+                        <span>Enable upload to my bucket</span>
+                    </label>
+                </div>
+                <div class="sp-field-row">
+                    <div class="sp-field">
+                        <label for="REMOTE_STORAGE_PROVIDER">Provider</label>
+                        <select name="REMOTE_STORAGE_PROVIDER" id="REMOTE_STORAGE_PROVIDER">
+                            <option value="s3">AWS S3</option>
+                            <option value="r2">Cloudflare R2</option>
+                            <option value="b2">Backblaze B2</option>
+                        </select>
+                    </div>
+                    <div class="sp-field">
+                        <label for="REMOTE_BUCKET">Bucket</label>
+                        <input type="text" name="REMOTE_BUCKET" id="REMOTE_BUCKET" autocomplete="off">
+                    </div>
+                </div>
+                <div class="sp-field">
+                    <label for="REMOTE_PREFIX">Prefix</label>
+                    <input type="text" name="REMOTE_PREFIX" id="REMOTE_PREFIX" placeholder="basebuddy/home-server">
+                </div>
+                <div class="sp-field">
+                    <label for="REMOTE_ENDPOINT">Endpoint (R2/B2)</label>
+                    <input type="text" name="REMOTE_ENDPOINT" id="REMOTE_ENDPOINT" placeholder="https://account.r2.cloudflarestorage.com">
+                </div>
+                <div class="sp-field-row">
+                    <div class="sp-field">
+                        <label for="REMOTE_REGION">Region</label>
+                        <input type="text" name="REMOTE_REGION" id="REMOTE_REGION" value="auto">
+                    </div>
+                    <div class="sp-field">
+                        <label for="REMOTE_ACCESS_KEY">Access key</label>
+                        <input type="text" name="REMOTE_ACCESS_KEY" id="REMOTE_ACCESS_KEY" autocomplete="off">
+                    </div>
+                </div>
+                <div class="sp-field">
+                    <label for="REMOTE_SECRET_KEY">Secret key</label>
+                    <input type="password" name="REMOTE_SECRET_KEY" id="REMOTE_SECRET_KEY" autocomplete="new-password" placeholder="Leave blank to keep existing">
+                    <span class="sp-hint" id="sp-secret-mask"></span>
+                </div>
+                <button type="button" class="btn btn-secondary" id="sp-test-remote">Test bucket</button>
+            </div>
+            <p id="sp-panel-none-note" class="sp-note">Cloud upload is off. Set cloud days above to zero, or pick BaseBuddy Cloud / My bucket.</p>
+        </div>
+    </details>
+
+    <details class="card sp-section sp-details-card">
+        <summary class="sp-section-title sp-details-summary">USB archive &amp; recording backup</summary>
+        <div class="sp-details-body">
+            <div class="sp-toggle">
+                <label class="sp-switch">
+                    <input type="checkbox" name="ARCHIVE_ENABLED" id="ARCHIVE_ENABLED">
+                    <span>Archive — move old files to USB, delete local copy</span>
+                </label>
+            </div>
+            <div class="sp-field-row">
+                <div class="sp-field">
+                    <label for="ARCHIVE_DRIVE_PATH">Archive drive</label>
+                    <input type="text" name="ARCHIVE_DRIVE_PATH" id="ARCHIVE_DRIVE_PATH">
+                </div>
+                <div class="sp-field">
+                    <label for="ARCHIVE_FOLDER">Folder</label>
+                    <input type="text" name="ARCHIVE_FOLDER" id="ARCHIVE_FOLDER">
+                </div>
+            </div>
+            <div class="sp-field-row">
+                <div class="sp-field sp-field-inline">
+                    <label for="ARCHIVE_MIN_AGE_DAYS">Min age (days)</label>
+                    <input type="number" name="ARCHIVE_MIN_AGE_DAYS" id="ARCHIVE_MIN_AGE_DAYS" min="0" max="365">
+                </div>
+                <div class="sp-field sp-field-inline">
+                    <label for="ARCHIVE_INTERVAL_DAYS">Scan interval (days)</label>
+                    <input type="number" name="ARCHIVE_INTERVAL_DAYS" id="ARCHIVE_INTERVAL_DAYS" min="1" max="30">
+                </div>
+                <button type="button" class="btn btn-secondary sp-test" data-test="ARCHIVE_DRIVE_PATH">Test archive drive</button>
+            </div>
+            <hr class="sp-hr">
+            <div class="sp-toggle">
+                <label class="sp-switch">
+                    <input type="checkbox" name="BACKUP_ENABLED" id="BACKUP_ENABLED">
+                    <span>Backup — copy recordings to USB (keep local)</span>
+                </label>
+            </div>
+            <div class="sp-field-row">
+                <div class="sp-field">
+                    <label for="BACKUP_DRIVE_PATH">Backup drive</label>
+                    <input type="text" name="BACKUP_DRIVE_PATH" id="BACKUP_DRIVE_PATH">
+                </div>
+                <div class="sp-field">
+                    <label for="BACKUP_FOLDER">Folder</label>
+                    <input type="text" name="BACKUP_FOLDER" id="BACKUP_FOLDER">
+                </div>
+            </div>
+            <div class="sp-field sp-field-inline">
+                <label for="BACKUP_INTERVAL_HOURS">Interval (hours)</label>
+                <input type="number" name="BACKUP_INTERVAL_HOURS" id="BACKUP_INTERVAL_HOURS" min="1" max="168">
+                <button type="button" class="btn btn-secondary sp-test" data-test="BACKUP_DRIVE_PATH">Test backup drive</button>
+            </div>
+        </div>
+    </details>
+
+    <div class="sp-actions">
+        <button type="submit" class="btn btn-primary" id="sp-save">
+            <span class="material-icons-outlined">save</span>
+            Save settings
+        </button>
+        <div class="sp-quick-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="sp-run-retention">Run retention</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="sp-run-archive">Run archive</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="sp-run-backup">Run backup</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="sp-list-drives">List drives</button>
+        </div>
+    </div>
+</form>
+
+<details class="card sp-section sp-details-card sp-tech">
+    <summary class="sp-section-title sp-details-summary">Technical status</summary>
+    <pre class="sp-json" id="sp-raw-status">Loading…</pre>
+    <pre class="sp-log" id="sp-log" hidden></pre>
+</details>
+
+<script src="{{ url_for('static', filename='js/storage_policy.js') }}"></script>
+{% endblock %}

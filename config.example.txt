@@ -1,0 +1,39 @@
+# BaseBuddy configuration (shell-style exports)
+# Copy to config.txt and set your values:
+#   cp config.example.txt config.txt
+#
+# Alternatively use .env (see env.example) — both are loaded at startup.
+
+# Cameras (add CAM3, CAM4, … as needed)
+export CAM1="rtsp://username:password@192.168.1.10:554/stream1"
+export CAM2="rtsp://username:password@192.168.1.11:554/stream1"
+
+# Server
+export HOST="0.0.0.0"
+export PORT="5000"
+export FLASK_ENV="production"
+
+# AI detection
+export DETECTION_ENABLED="true"
+export AI_MODEL="yolov8n.pt"
+export AI_CONF="0.35"
+
+# Inference backend: local | cloud | hybrid
+export INFERENCE_MODE="local"
+
+# Recording
+export RECORD_ROOT="./recordings"
+export SEG_MINUTES="15"
+export RETENTION_DAYS="7"
+
+# Backup / archive (optional — set paths to mounted drives)
+export BACKUP_ENABLED="false"
+export BACKUP_DRIVE_PATH="/media/backup"
+export ARCHIVE_ENABLED="false"
+export ARCHIVE_DRIVE_PATH="/media/archive"
+
+# Production security (recommended when exposed beyond localhost)
+# export AUTH_ENABLE="true"
+# export ADMIN_USERNAME="admin"
+# export ADMIN_PASSWORD="change-me"
+# export SECRET_KEY="generate-a-long-random-string"

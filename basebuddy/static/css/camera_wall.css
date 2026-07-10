@@ -1,0 +1,692 @@
+/* Clean Camera Wall - Tiled View */
+.wall-container {
+  width: 100%;
+  min-height: calc(100vh - var(--nav-height));
+  background: var(--color-surveillance-bg);
+  padding: 8px;
+  box-sizing: border-box;
+}
+.grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+  gap: 4px;
+  width: 100%;
+}
+@media (min-width: 1400px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1800px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+
+.camera-tile {
+  position: relative;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  aspect-ratio: 16/9;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.3s ease;
+}
+.camera-tile:hover {
+  transform: scale(1.01);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 45%, transparent);
+  z-index: 10;
+}
+.camera-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.camera-tile .tile-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #888;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.camera-tile .tile-loading.hidden {
+  display: none;
+}
+.camera-tile .tile-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+  color: white;
+  padding: 20px 12px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.camera-tile .tile-remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 20;
+}
+.camera-tile .tile-remove-btn .material-icons-outlined {
+  font-size: 18px;
+}
+.camera-tile:hover .tile-remove-btn {
+  opacity: 1;
+}
+.camera-tile .tile-remove-btn:hover {
+  background: var(--color-danger);
+}
+
+.camera-tile .tile-settings-btn {
+  position: absolute;
+  top: 8px;
+  right: 44px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 20;
+}
+.camera-tile .tile-settings-btn .material-icons-outlined {
+  font-size: 18px;
+}
+.camera-tile:hover .tile-settings-btn {
+  opacity: 1;
+}
+.camera-tile .tile-settings-btn:hover {
+  background: var(--color-primary, #1a73e8);
+}
+
+/* Recording: hover to record, pause while active */
+.camera-tile .tile-rec-overlay {
+  position: absolute;
+  bottom: 42px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 25;
+  pointer-events: none;
+}
+.camera-tile .tile-rec-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease, opacity 0.2s ease, background 0.2s ease;
+}
+.camera-tile .tile-rec-btn:hover {
+  transform: scale(1.06);
+}
+.camera-tile .tile-rec-btn .material-icons-outlined {
+  font-size: 20px;
+}
+.camera-tile .tile-rec-start {
+  background: linear-gradient(145deg, #e53935 0%, #b71c1c 100%);
+  opacity: 0;
+  visibility: hidden;
+}
+.camera-tile:hover .tile-rec-start {
+  opacity: 1;
+  visibility: visible;
+}
+.camera-tile.is-recording .tile-rec-start {
+  display: none;
+}
+.camera-tile .tile-rec-pause {
+  background: linear-gradient(145deg, #37474f 0%, #263238 100%);
+  display: none;
+}
+.camera-tile.is-recording .tile-rec-pause {
+  display: inline-flex;
+  opacity: 1;
+  visibility: visible;
+}
+.camera-tile .tile-rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff1744;
+  box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.5);
+  display: none;
+  flex-shrink: 0;
+}
+.camera-tile.is-recording .tile-rec-dot {
+  display: block;
+  animation: rec-pulse 1.2s ease-out infinite;
+}
+@keyframes rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.55); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 23, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); }
+}
+.camera-tile .tile-rec-badge {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #455a64 0%, #37474f 100%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 26;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  white-space: nowrap;
+}
+.camera-tile .tile-rec-badge.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Loading placeholder */
+.camera-tile.loading-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px dashed #334;
+}
+.camera-tile.loading-placeholder:hover {
+  transform: none;
+  box-shadow: none;
+}
+.loading-content {
+  text-align: center;
+  color: #aab;
+}
+.spinning {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Saved cameras list in modal */
+.saved-cameras-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.saved-camera-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.saved-camera-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+.saved-camera-info {
+  display: flex;
+  flex-direction: column;
+}
+.saved-camera-name {
+  font-weight: 600;
+  color: #202124;
+}
+.saved-camera-url {
+  font-size: 12px;
+  color: #666;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-camera-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-add-saved {
+  background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+.btn-add-saved:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+.btn-delete-saved {
+  background: transparent;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+.btn-delete-saved:hover {
+  background: #dc3545;
+  color: white;
+}
+.btn-delete-saved .material-icons-outlined {
+  font-size: 16px;
+}
+.camera-tile .tile-name {
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.camera-tile .tile-status {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.camera-tile.disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.camera-tile.disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Empty slot */
+.empty-slot {
+  background: #16213e;
+  border: 2px dashed #334;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.empty-slot:hover {
+  border-color: #667eea;
+}
+.empty-slot-content {
+  text-align: center;
+  color: #556;
+}
+.empty-slot-content .material-icons-outlined {
+  font-size: 40px;
+  opacity: 0.4;
+}
+
+/* Wall header */
+.wall-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 12px;
+  color: #aab;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wall-title-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wall-title {
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wall-hint {
+  font-size: 12px;
+  opacity: 0.6;
+}
+.wall-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wall-action-btn {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #aab;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+.wall-action-btn:hover {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.wall-add-btn {
+  background: color-mix(in srgb, var(--color-success) 22%, transparent);
+  color: var(--color-success);
+}
+.wall-add-btn:hover {
+  background: color-mix(in srgb, var(--color-success) 38%, transparent);
+  color: #fff;
+}
+
+/* Camera Groups */
+.group-buttons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.group-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: #aab;
+  border-radius: 16px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.group-btn:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+.group-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.group-btn .material-icons-outlined {
+  font-size: 14px;
+}
+.group-btn .group-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-sm { padding: 4px 8px; font-size: 12px; height: 28px; }
+
+/* Modal Overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay .modal-content {
+  background: white;
+  border-radius: 12px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.modal-overlay .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+.modal-overlay .modal-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+.modal-overlay .modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #888;
+  padding: 0;
+  line-height: 1;
+}
+.modal-overlay .modal-close:hover {
+  color: #333;
+}
+.modal-overlay .modal-body {
+  padding: 20px;
+}
+
+.info-card-modern {
+  background: var(--color-primary-subtle);
+  border-left: 4px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: var(--space-md);
+  display: flex;
+  gap: 12px;
+  margin-top: var(--space-lg);
+}
+.info-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+.info-icon .material-icons-outlined {
+  font-size: 24px;
+}
+.info-content strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text);
+}
+.info-content p {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+/* Camera profile modal scroll */
+#cameraProfileModal.show {
+  display: flex !important;
+}
+#cameraProfileModal .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+/* Prevent body scroll when modal is open, but allow modal content to scroll */
+body.modal-open {
+  overflow: hidden !important;
+}
+/* Ensure camera wall can still scroll when modal is open */
+#camera-grid {
+  overflow-y: visible;
+  min-height: 400px;
+}
+
+/* Add camera modal */
+.wall-modal-dialog {
+  margin: 20px auto;
+}
+
+.wall-modal-body {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.saved-cameras-section {
+  margin-bottom: var(--space-md);
+}
+
+.saved-cameras-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.saved-cameras-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.saved-cameras-toggle-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.saved-cameras-count {
+  background: var(--color-text-muted);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.saved-cameras-chevron {
+  transition: transform var(--transition-base);
+  color: var(--color-text-muted);
+}
+
+.saved-cameras-collapse {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  background: var(--color-surface);
+}
+
+.saved-camera-item {
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.saved-camera-item:last-child {
+  border-bottom: none;
+}
+
+.saved-camera-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.saved-camera-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.saved-camera-name {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  margin-bottom: 2px;
+}
+
+.saved-camera-url {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-camera-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.poll-rate-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.poll-rate-display {
+  min-width: 70px;
+  text-align: center;
+  padding: 6px 10px;
+  background: var(--color-primary-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: var(--font-size-base);
+}
+
+.birdseye-wrap {
+  width: 100%;
+  min-height: 420px;
+  background: #0f0f1a;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+#birdseye-canvas {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+}
+
+.wall-action-btn.active {
+  background: var(--color-primary, #6366f1);
+  color: #fff;
+}

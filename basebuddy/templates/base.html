@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BaseBuddy - {% block title %}{% endblock %}</title>
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/reset.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/typography.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/buttons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/cards.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/navigation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/feedback.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/modals.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/utilities.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/setup.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% include 'partials/_navbar.html' %}
+
+    <main class="{{ container_class|default('container') }}">
+        {% include 'partials/_config_tabs.html' %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/setup_banner.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

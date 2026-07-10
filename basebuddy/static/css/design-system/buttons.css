@@ -1,0 +1,210 @@
+/* Unified button system */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: var(--font-size-base);
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.btn .material-icons-outlined {
+  font-size: 18px;
+}
+
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Variants */
+.btn-primary,
+.btn--primary {
+  background-color: var(--color-primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled),
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-secondary,
+.btn--secondary {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled),
+.btn--secondary:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.btn-ghost,
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled),
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.btn-danger,
+.btn--danger {
+  background-color: var(--color-danger);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled),
+.btn--danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-success,
+.btn--success {
+  background-color: var(--color-success);
+  color: #fff;
+}
+
+.btn-success:hover:not(:disabled),
+.btn--success:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* Legacy aliases */
+.btn-primary-modern {
+  background-color: var(--color-primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary-modern:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-outline-secondary {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+.btn-outline-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+/* Sizes */
+.btn-sm,
+.btn--sm {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--font-size-sm);
+}
+
+.btn-sm .material-icons-outlined,
+.btn--sm .material-icons-outlined {
+  font-size: 16px;
+}
+
+.btn-lg,
+.btn--lg {
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: var(--font-size-lg);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-icon,
+.btn--icon {
+  min-width: 36px;
+  width: 36px;
+  padding: 0;
+}
+
+.btn-icon.btn-sm,
+.btn--icon.btn--sm {
+  min-width: 28px;
+  width: 28px;
+}
+
+/* Tab-style links (gallery, config) */
+.tab-link,
+.view-link,
+.config-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 16px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-base);
+}
+
+.tab-link:hover,
+.view-link:hover,
+.config-tab:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.tab-link.active,
+.view-link.active,
+.config-tab.active {
+  color: var(--color-primary);
+  background: var(--color-primary-subtle);
+}
+
+.tab-link .material-icons-outlined,
+.view-link .material-icons-outlined,
+.config-tab .material-icons-outlined {
+  font-size: 18px;
+}
+
+.preset-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.preset-btn:hover {
+  background: var(--color-primary-subtle);
+}
+
+.preset-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+}

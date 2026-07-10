@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Disabled Classes{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Disabled Classes</h1>
+    <p class="page-subtitle">Enable or disable detection of specific object classes</p>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">Error: {{ error }}</div>
+{% else %}
+
+<div class="stats">
+    <div class="stat-item">
+        <span class="stat-label">Total Classes Available</span>
+        <span class="stat-value primary">{{ total_classes }}</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Currently Disabled</span>
+        <span class="stat-value danger">{{ disabled_count }}</span>
+    </div>
+    <div class="stat-item">
+        <span class="stat-label">Currently Enabled</span>
+        <span class="stat-value success">{{ total_classes - disabled_count }}</span>
+    </div>
+</div>
+
+<div id="statusMessage"></div>
+
+<form id="disabledClassesForm">
+    <div class="classes-grid">
+        {% for cls in classes %}
+        <div class="class-item {% if not cls.enabled %}disabled{% endif %}">
+            <input type="checkbox" id="class_{{ cls.name }}" name="disabled_classes" 
+                   value="{{ cls.name }}" {% if cls.enabled %}checked{% endif %}>
+            <label for="class_{{ cls.name }}">{{ cls.name|title }}</label>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="actions">
+        <button type="button" class="btn btn-primary" onclick="saveDisabledClasses()">
+            <span class="material-icons-outlined">save</span> Save Changes
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="selectAll()">
+            <span class="material-icons-outlined">check_box</span> Select All
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="selectNone()">
+            <span class="material-icons-outlined">check_box_outline_blank</span> Select None
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="resetToDefaults()">
+            <span class="material-icons-outlined">restart_alt</span> Reset to Defaults
+        </button>
+    </div>
+</form>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/config_disabled_classes.js') }}"></script>
+{% endblock %}

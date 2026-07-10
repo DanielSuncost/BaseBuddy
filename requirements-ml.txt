@@ -1,0 +1,14 @@
+# BaseBuddy — ML / detection stack (install when using AI features)
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+supervision>=0.20.0
+
+# SAM click-to-segment (plant regions, 3D multiview masks)
+# Also requires the checkpoint sam_vit_b_01ec64.pth in the project root — see models/README.md
+segment-anything>=1.0
+
+# Face recognition (optional — heavy; see docs/OPTIONAL_DEPS.md)
+deepface>=0.0.79
+tensorflow>=2.13.0
+tf-keras>=2.20.0

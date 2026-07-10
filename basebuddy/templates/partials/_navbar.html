@@ -1,0 +1,28 @@
+<nav class="navbar">
+    <a href="/" class="navbar-brand">
+        <span class="material-icons-outlined">security</span>
+        BaseBuddy
+    </a>
+    <div class="nav-links">
+        {% for item in nav_items %}
+        {% if item.id == 'config' %}
+        {% for link in premium_nav_links or [] %}
+        <a href="{{ link.href }}" class="nav-item nav-item-premium">
+            <span class="material-icons-outlined">{{ link.icon or 'cloud' }}</span>
+            {{ link.label }}
+        </a>
+        {% endfor %}
+        {% endif %}
+        <a href="{{ item.href }}" class="nav-item {% if active_page == item.id %}active{% endif %}">
+            <span class="material-icons-outlined">{{ item.icon }}</span>
+            {{ item.label }}
+        </a>
+        {% endfor %}
+    </div>
+    <div class="navbar-actions">
+        <button type="button" id="theme-toggle" class="btn btn-ghost btn-icon theme-toggle" aria-label="Toggle light/dark theme">
+            <span class="material-icons-outlined theme-icon-light">dark_mode</span>
+            <span class="material-icons-outlined theme-icon-dark">light_mode</span>
+        </button>
+    </div>
+</nav>

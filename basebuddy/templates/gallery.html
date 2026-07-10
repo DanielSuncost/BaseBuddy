@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}Detection Gallery{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ view_title }}</h1>
+    <p class="page-subtitle">Browse and manage detected objects ({{ total_items }} items)</p>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+    <span class="material-icons-outlined">error</span>
+    <div>
+        <strong>Error</strong>
+        <p class="alert-body">Error loading gallery: {{ error }}</p>
+        <a href="/" class="btn btn-primary btn-sm mt-4">Back to Home</a>
+    </div>
+</div>
+{% else %}
+
+<div id="statusMessage"></div>
+
+<!-- Compact filters -->
+<div class="gallery-toolbar" id="galleryToolbar">
+    <div class="toolbar-field">
+        <label class="toolbar-label" for="galleryTimeFilter">Time</label>
+        <select id="galleryTimeFilter" class="toolbar-select" onchange="applyGalleryFilters('time')">
+            <option value="recent:1" {% if view_mode == 'recent' and recent_hours == 1 %}selected{% endif %}>Last hour</option>
+            <option value="recent:6" {% if view_mode == 'recent' and recent_hours == 6 %}selected{% endif %}>Last 6 hours</option>
+            <option value="recent:24" {% if view_mode == 'recent' and recent_hours == 24 %}selected{% endif %}>Last 24 hours</option>
+            <option value="date" {% if view_mode == 'date' %}selected{% endif %}>Browse by date</option>
+        </select>
+    </div>
+    <div class="toolbar-field">
+        <label class="toolbar-label" for="galleryClassFilter">Class</label>
+        <select id="galleryClassFilter" class="toolbar-select" onchange="applyGalleryFilters('class')">
+            <option value="" {% if not class_filter %}selected{% endif %}>All classes</option>
+            {% for cls in available_classes %}
+            <option value="{{ cls }}" {% if class_filter == cls %}selected{% endif %}>{{ cls|replace('_', ' ')|title }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="toolbar-field toolbar-field-grow">
+        <label class="toolbar-label" for="galleryCameraFilter">Camera</label>
+        <select id="galleryCameraFilter" class="toolbar-select" onchange="applyGalleryFilters('camera')">
+            <option value="" {% if not cam_param %}selected{% endif %}>All cameras{% if gallery_cameras %} ({{ gallery_cameras|length }}){% endif %}</option>
+            {% for cam in gallery_cameras %}
+            <option value="{{ cam.value }}" {% if cam_param == cam.value %}selected{% endif %}>
+                {{ cam.label }} · {{ cam.count }} detections
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="toolbar-field">
+        <label class="toolbar-label" for="galleryPerPage">Show</label>
+        <select id="galleryPerPage" class="toolbar-select toolbar-select-narrow" onchange="applyGalleryFilters('per_page')">
+            <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+            <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+        </select>
+    </div>
+    <div class="toolbar-field toolbar-actions">
+        <a href="/gallery?view={{ view_mode }}&hours={{ recent_hours }}&date={{ requested_date }}&page=1&per_page={{ per_page }}{% if class_filter %}&class={{ class_filter }}{% endif %}{% if cam_param %}&cam={{ cam_param }}{% endif %}&show_similar={% if show_similar %}false{% else %}true{% endif %}"
+           class="btn btn-ghost btn-sm toolbar-toggle-similar">
+            <span class="material-icons-outlined icon-inline-sm">{% if show_similar %}visibility_off{% else %}visibility{% endif %}</span>
+            {% if show_similar %}Grouped{% else %}All frames{% endif %}
+        </a>
+    </div>
+</div>
+
+{% if show_calendar and calendar_month_title %}
+<!-- Month calendar (Browse by Date) -->
+<div class="calendar-container">
+    <div class="calendar-header">
+        <button type="button" class="calendar-nav-btn btn btn-ghost btn-icon" onclick="changeGalleryMonth(-1)" aria-label="Previous month">
+            <span class="material-icons-outlined">chevron_left</span>
+        </button>
+        <h3>{{ calendar_month_title }}</h3>
+        <button type="button" class="calendar-nav-btn btn btn-ghost btn-icon" onclick="changeGalleryMonth(1)" aria-label="Next month">
+            <span class="material-icons-outlined">chevron_right</span>
+        </button>
+    </div>
+    <div class="calendar-grid">
+        <div class="calendar-day-header">Mon</div>
+        <div class="calendar-day-header">Tue</div>
+        <div class="calendar-day-header">Wed</div>
+        <div class="calendar-day-header">Thu</div>
+        <div class="calendar-day-header">Fri</div>
+        <div class="calendar-day-header">Sat</div>
+        <div class="calendar-day-header">Sun</div>
+        {% for cell in calendar_cells %}
+            {% if cell is none %}
+                <div class="calendar-day empty"></div>
+            {% else %}
+                <div class="calendar-day{% if cell.selected %} selected{% elif cell.is_today %} today{% endif %}"
+                     onclick="selectGalleryDate('{{ cell.date_str }}')" role="button" tabindex="0"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectGalleryDate('{{ cell.date_str }}');}">
+                    <div class="day-number">{{ cell.day }}</div>
+                    {% if cell.count > 0 %}
+                    <div class="day-count">{{ cell.count }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>
+<div class="date-quick-nav">
+    <a href="/gallery?view=date&date={{ prev_date }}&page=1&per_page={{ per_page }}{% if class_filter %}&class={{ class_filter }}{% endif %}{% if cam_param %}&cam={{ cam_param }}{% endif %}{% if show_similar %}&show_similar=true{% endif %}"
+       class="btn btn-secondary btn-sm">← {{ prev_date }}</a>
+    <span class="date-quick-nav-label">Selected: <strong>{{ requested_date }}</strong></span>
+    <a href="/gallery?view=date&date={{ next_date }}&page=1&per_page={{ per_page }}{% if class_filter %}&class={{ class_filter }}{% endif %}{% if cam_param %}&cam={{ cam_param }}{% endif %}{% if show_similar %}&show_similar=true{% endif %}"
+       class="btn btn-secondary btn-sm">{{ next_date }} →</a>
+</div>
+{% endif %}
+
+<!-- Gallery Controls -->
+<div class="gallery-controls">
+    <div class="control-group">
+        <button class="btn btn-secondary" onclick="exportTrainingData()">
+            <span class="material-icons-outlined">download</span> Export training data
+        </button>
+        <button class="btn btn-secondary" onclick="toggleSelectAll()">
+            <span class="material-icons-outlined">select_all</span> Select All
+        </button>
+        <span class="selection-count" id="selectionCount">0 selected</span>
+    </div>
+    <div class="control-group">
+        <button class="btn btn-danger hidden" onclick="deleteSelected()" id="deleteBtn">
+            <span class="material-icons-outlined">delete</span> Delete Selected
+        </button>
+    </div>
+</div>
+
+<!-- Gallery Grid -->
+<div class="gallery-grid">
+    {% if detections %}
+        {% for det in detections %}
+        <div class="gallery-item" 
+             data-id="{{ det.id }}"
+             data-img-path="{{ det.full_image_path or det.thumbnail_path }}"
+             data-class="{{ det.class_name }}"
+             data-camera="{{ det.camera_id + 1 }}"
+             data-timestamp="{{ det.human_timestamp }}"
+             data-relative="{{ det.relative_time }}"
+             data-confidence="{{ (det.confidence * 100)|int }}"
+             data-group-key="{{ (det.group_key or '')|e }}"
+             data-group-count="{{ det.group_count or det.similar_count or 1 }}"
+             data-group-type="{{ det.group_type or 'similar' }}"
+             data-gallery-view="{{ view_mode }}"
+             data-gallery-hours="{{ recent_hours }}"
+             data-gallery-date="{{ requested_date }}"
+             data-gallery-cam="{{ cam_param }}"
+             onclick="openModalFromItem(this, event)">
+            <div class="gallery-item-checkbox" onclick="toggleSelection({{ det.id }}, event); event.stopPropagation();"></div>
+            
+            {% set group_count = det.group_count or det.similar_count or 1 %}
+            {% if group_count > 1 %}
+                {% if det.group_type == 'track' %}
+                <div class="track-count-badge">
+                    <span class="material-icons-outlined track-icon">timeline</span>
+                    <div class="track-count-number">{{ group_count }}</div>
+                </div>
+                {% else %}
+                <div class="similar-count-badge">
+                    <span class="material-icons-outlined">photo_library</span>
+                    <div class="similar-count-number">{{ group_count }}</div>
+                </div>
+                {% endif %}
+            {% endif %}
+            
+            {% set img_src = det.thumbnail_path or det.full_image_path %}
+            {% if img_src %}
+            <img src="{{ img_src }}" alt="{{ det.class_name }}" loading="lazy">
+            {% else %}
+            <div class="no-thumbnail">
+                <span class="material-icons-outlined">image</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <span class="material-icons-outlined empty-icon">photo_library</span>
+            <p>No detections found</p>
+            <small>Objects will appear here when detected by your cameras</small>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination-controls">
+    {% if page > 1 %}
+    <a href="/gallery?view={{ view_mode }}&hours={{ recent_hours }}&date={{ requested_date }}&page={{ page - 1 }}&per_page={{ per_page }}{% if class_filter %}&class={{ class_filter }}{% endif %}{% if cam_param %}&cam={{ cam_param }}{% endif %}{% if show_similar %}&show_similar=true{% endif %}" 
+       class="btn btn-secondary"><span class="material-icons-outlined icon-inline-sm">chevron_left</span> Previous</a>
+    {% else %}
+    <span class="btn btn-secondary btn-disabled-look"><span class="material-icons-outlined icon-inline-sm">chevron_left</span> Previous</span>
+    {% endif %}
+    
+    <span class="pagination-info">Page <b>{{ page }}</b> of <b>{{ total_pages }}</b></span>
+    
+    {% if page < total_pages %}
+    <a href="/gallery?view={{ view_mode }}&hours={{ recent_hours }}&date={{ requested_date }}&page={{ page + 1 }}&per_page={{ per_page }}{% if class_filter %}&class={{ class_filter }}{% endif %}{% if cam_param %}&cam={{ cam_param }}{% endif %}{% if show_similar %}&show_similar=true{% endif %}" 
+       class="btn btn-secondary">Next <span class="material-icons-outlined icon-inline-sm">chevron_right</span></a>
+    {% else %}
+    <span class="btn btn-secondary btn-disabled-look">Next <span class="material-icons-outlined icon-inline-sm">chevron_right</span></span>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Image Modal (single image or track / group grid) -->
+<div id="imageModal" class="modal">
+    <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+        <div class="modal-body">
+            <div class="modal-media">
+                <div id="singleImageView" class="modal-single-view">
+                    <img class="modal-image" id="modalImg" alt="">
+                </div>
+                <div id="groupView" class="gallery-group-view hidden">
+                    <div class="group-view-header" id="groupViewHeader"></div>
+                    <p id="groupLoading" class="gallery-group-loading hidden">Loading sequence…</p>
+                    <div class="group-images-grid" id="groupImagesGrid"></div>
+                    <div class="group-actions">
+                        <button type="button" class="btn btn-secondary" id="generateGifBtn" onclick="generateGIF()">
+                            <span class="material-icons-outlined">animation</span> Generate GIF
+                        </button>
+                        <a id="recordingLink" href="#" class="btn btn-secondary hidden" target="_blank" rel="noopener">
+                            <span class="material-icons-outlined">videocam</span> Recording
+                        </a>
+                    </div>
+                    <img id="gifPlayer" class="gif-player hidden" alt="">
+                    <div id="gifControls" class="gif-controls hidden">
+                        <button type="button" class="btn btn-sm" onclick="closeGifViewer()">Close GIF</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-details">
+                <div class="modal-details-header">
+                    <h3 class="modal-title" id="modalTitle">Detection</h3>
+                    <span class="modal-class-badge" id="modalClass"></span>
+                </div>
+                <div class="modal-meta-grid">
+                    <p class="modal-meta">
+                        <span class="material-icons-outlined">calendar_today</span>
+                        <span><span id="modalTime"></span> (<span id="modalRelative"></span>)</span>
+                    </p>
+                    <p class="modal-meta">
+                        <span class="material-icons-outlined">videocam</span>
+                        <span>Camera <span id="modalCam"></span></span>
+                    </p>
+                    <p class="modal-meta">
+                        <span class="material-icons-outlined">analytics</span>
+                        <span>Confidence: <span class="modal-confidence" id="modalConf"></span></span>
+                    </p>
+                </div>
+                <div class="modal-label-panel" id="modalLabelPanel">
+                    <div class="modal-label-heading">
+                        <span class="material-icons-outlined icon-sm">school</span> Teach the model
+                    </div>
+                    <p class="modal-label-intro">Name what you see here so training learns <em>your</em> cat, car, or person — not just generic classes.</p>
+                    <p id="labelSavedBadge" class="label-saved-badge hidden"></p>
+
+                    <div class="modal-label-row">
+                        <label class="modal-label-field" for="labelIdentity">Identity name</label>
+                        <input type="text" id="labelIdentity" class="modal-label-input"
+                            placeholder="e.g. Mittens, Sarah, my_honda, wife_tesla">
+                        <span class="modal-label-hint">Used for custom training. Cat → <code>cat_mittens</code>, car → <code>car_honda</code>, person → your name.</span>
+                    </div>
+
+                    <div class="modal-label-row" id="personLabelRow">
+                        <label class="modal-label-field">Person + face (when detected as person)</label>
+                        <select id="labelPersonSelect" class="toolbar-select">
+                            <option value="">— Select known person —</option>
+                        </select>
+                        <input type="text" id="labelPersonName" class="modal-label-input" placeholder="Or type a new name">
+                        <label class="modal-label-check">
+                            <input type="checkbox" id="labelAddToFaceLibrary" checked>
+                            Save face embedding for re-identification
+                        </label>
+                        <span class="modal-label-hint">Face library is managed on <a href="/people">Identities</a>.</span>
+                    </div>
+
+                    <div class="modal-label-row">
+                        <label class="modal-label-field" for="labelCorrectClass">Wrong object type? (optional)</label>
+                        <select id="labelCorrectClass" class="toolbar-select">
+                            <option value="">— Keep detected class —</option>
+                            {% for cls in available_classes %}
+                            <option value="{{ cls }}">{{ cls|replace('_', ' ')|title }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="modal-label-hint">Only if YOLO got the type wrong (dog vs cat). Use identity name above for <em>which</em> cat/car/person.</span>
+                    </div>
+
+                    <div class="modal-label-row">
+                        <label class="modal-label-field" for="labelNotes">Notes (optional)</label>
+                        <input type="text" id="labelNotes" class="modal-label-input" placeholder="Not used for training — e.g. delivery driver, rainy day">
+                    </div>
+
+                    <button type="button" class="btn btn-primary" onclick="saveDetectionLabel()">
+                        <span class="material-icons-outlined">label</span> Save teaching label
+                    </button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-fp" onclick="markCurrentFalsePositive()" title="Label this detection as a mistake and save it for training export">
+                       <span class="material-icons-outlined">thumb_down</span> False positive
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="ignoreCurrentRegion()" title="Stop saving this class when it appears in this region of the frame">
+                       <span class="material-icons-outlined">block</span> Ignore
+                    </button>
+                    <button type="button" class="btn btn-danger modal-action-delete" onclick="deleteCurrent()">
+                       <span class="material-icons-outlined">delete</span> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
+{% endblock %}

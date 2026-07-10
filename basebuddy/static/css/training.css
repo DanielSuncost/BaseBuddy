@@ -1,0 +1,38 @@
+.training-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    padding: 16px;
+}
+.stat-box { text-align: center; padding: 12px; background: var(--color-surface-alt, #f8fafc); border-radius: 8px; }
+.stat-val { font-size: 22px; font-weight: 700; }
+.stat-lbl { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.training-gpu { padding: 0 16px 16px; font-size: 13px; }
+.training-list { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.training-row {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    padding: 12px; border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap;
+}
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.training-hint { padding: 0 16px; font-size: 13px; }
+.training-fp-list { padding: 12px 16px 16px; }
+.fp-zone-ul { list-style: none; margin: 0; padding: 0; }
+.fp-zone-ul li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.training-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.training-modal[hidden] { display: none !important; }
+.training-modal-inner { max-width: 480px; width: 100%; padding: 20px; }
+.training-modal-inner label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; }
+.training-modal-inner input[type=text], .training-modal-inner input[type=number] { padding: 8px 10px; }
+.training-check { flex-direction: row !important; align-items: center; gap: 8px; }
+.training-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.training-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #202124; color: #fff; padding: 10px 18px; border-radius: 8px; z-index: 1100; font-size: 14px;
+}
+.training-toast.err { background: #c5221f; }
+.tag.ok { font-size: 11px; background: #e6f4ea; color: #137333; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+.muted { color: var(--text-muted); font-size: 13px; }
+.err { color: var(--danger, #c5221f); }

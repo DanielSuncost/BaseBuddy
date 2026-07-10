@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Power Management{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/config_power.css') }}">
+{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Power Management</h1>
+    <p class="page-subtitle">Adjust power consumption and detection profiles in real time</p>
+</div>
+
+<section class="card power-status-card">
+    <h2 class="power-section-title">Current status</h2>
+    <div class="power-stats">
+        <div class="power-stat"><span id="current-profile" class="power-stat-val">—</span><span class="power-stat-label">Profile</span></div>
+        <div class="power-stat"><span id="detection-rate" class="power-stat-val">—</span><span class="power-stat-label">Detection rate</span></div>
+        <div class="power-stat"><span id="frame-skip" class="power-stat-val">—</span><span class="power-stat-label">Frame skip</span></div>
+        <div class="power-stat"><span id="gpu-status" class="power-stat-val">—</span><span class="power-stat-label">GPU</span></div>
+    </div>
+    <p class="power-meta">
+        <strong>Time:</strong> <span id="current-time">—</span> ·
+        <strong>Night mode:</strong> <span id="night-mode">—</span> ·
+        <strong>Mode:</strong> <span id="profile-mode">—</span>
+    </p>
+</section>
+
+<section class="card">
+    <h2 class="power-section-title">Manual profile override</h2>
+    <label>Power profile
+        <select id="profile-select" class="power-select">
+            <option value="auto">Auto (time-based)</option>
+            <option value="maximum">Maximum</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="minimum">Minimum</option>
+        </select>
+    </label>
+    <p class="power-hint">Select Auto to use time-based automatic scaling.</p>
+    <div class="power-actions">
+        <button type="button" class="btn btn-primary" id="power-apply">Apply profile</button>
+        <button type="button" class="btn btn-secondary" id="power-reset-auto">Reset to auto</button>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="power-section-title">Night hours</h2>
+    <div class="power-grid">
+        <label>Night start<input type="time" id="night-start" value="22:00"></label>
+        <label>Night end<input type="time" id="night-end" value="06:00"></label>
+    </div>
+    <button type="button" class="btn btn-primary" id="power-night-save">Update night hours</button>
+</section>
+
+<section class="card">
+    <h2 class="power-section-title">Profile details</h2>
+    <div class="power-table-wrap">
+        <table class="power-table">
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Maximum</th>
+                    <th>High</th>
+                    <th>Medium</th>
+                    <th>Low</th>
+                    <th>Minimum</th>
+                </tr>
+            </thead>
+            <tbody id="profile-table"></tbody>
+        </table>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/config_power.js') }}"></script>
+{% endblock %}

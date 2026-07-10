@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Resource Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/resources.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="page-title">
+                <span class="material-icons-outlined">memory</span>
+                Resource Management
+            </h1>
+            <p class="page-subtitle">Monitor and configure GPU, CPU, and memory usage</p>
+        </div>
+    </div>
+
+    <!-- Real-time Stats Cards -->
+    <div class="row mb-4" id="statsCards">
+        <!-- GPU Stats -->
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card resource-card">
+                <div class="card-header">
+                    <span class="material-icons-outlined">memory</span>
+                    <h5>GPU Memory</h5>
+                </div>
+                <div class="card-body">
+                    <div class="resource-stat">
+                        <div class="stat-label">Used</div>
+                        <div class="stat-value" id="gpuUsed">-</div>
+                        <div class="stat-unit">MB</div>
+                    </div>
+                    <div class="progress mb-2">
+                        <div class="progress-bar" id="gpuProgress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div class="stat-details">
+                        <small>Free: <span id="gpuFree">-</span> MB</small><br>
+                        <small>Total: <span id="gpuTotal">-</span> MB</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CPU Stats -->
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card resource-card">
+                <div class="card-header">
+                    <span class="material-icons-outlined">speed</span>
+                    <h5>CPU Usage</h5>
+                </div>
+                <div class="card-body">
+                    <div class="resource-stat">
+                        <div class="stat-label">Usage</div>
+                        <div class="stat-value" id="cpuPercent">-</div>
+                        <div class="stat-unit">%</div>
+                    </div>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-info" id="cpuProgress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RAM Stats -->
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card resource-card">
+                <div class="card-header">
+                    <span class="material-icons-outlined">storage</span>
+                    <h5>RAM Usage</h5>
+                </div>
+                <div class="card-body">
+                    <div class="resource-stat">
+                        <div class="stat-label">Used</div>
+                        <div class="stat-value" id="ramUsed">-</div>
+                        <div class="stat-unit">MB</div>
+                    </div>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-success" id="ramProgress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div class="stat-details">
+                        <small>Free: <span id="ramFree">-</span> MB</small><br>
+                        <small>Total: <span id="ramTotal">-</span> MB</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Profiling -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <span class="material-icons-outlined">analytics</span>
+                    <h5>Performance Profiling</h5>
+                </div>
+                <div class="card-body">
+                    <div id="profilingSummary">
+                        <p>Loading profiling data...</p>
+                    </div>
+                    <div id="cameraProfiling" class="mt-3">
+                        <h6>Per-Camera Metrics</h6>
+                        <div id="cameraMetricsList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GPU Queue Status -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>GPU Access Queue</h5>
+                </div>
+                <div class="card-body">
+                    <div id="gpuQueueStatus">
+                        <p>Current User: <strong id="currentGpuUser">None</strong></p>
+                        <p>Queue Length: <strong id="queueLength">0</strong></p>
+                        <div id="queueList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Panel -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Resource Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="resourceConfigForm">
+                        <div class="mb-3">
+                            <label class="form-label">GPU Memory Threshold (%)</label>
+                            <input type="number" class="form-control" id="gpuMemoryThreshold"
+                                   min="50" max="95" step="1" value="85">
+                            <small class="form-text text-muted">
+                                Don't allocate GPU memory if usage exceeds this percentage
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Base Detection FPS</label>
+                            <input type="number" class="form-control" id="baseDetectionFps"
+                                   min="1" max="30" step="0.5" value="10">
+                            <small class="form-text text-muted">
+                                Base frames per second for object detection
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Face Recognition Interval (seconds)</label>
+                            <input type="number" class="form-control" id="faceRecognitionInterval"
+                                   min="0.5" max="10" step="0.5" value="2">
+                            <small class="form-text text-muted">
+                                Minimum seconds between face recognition calls
+                            </small>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="opportunisticProcessing" checked>
+                            <label class="form-check-label" for="opportunisticProcessing">
+                                Enable Opportunistic Processing
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Skip low-priority tasks when GPU is busy
+                            </small>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="allowCriticalOverride" checked>
+                            <label class="form-check-label" for="allowCriticalOverride">
+                                Allow Critical Override
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Critical tasks (detection) can preempt lower priority tasks
+                            </small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <span class="material-icons-outlined">save</span> Save Configuration
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/resources.js') }}"></script>
+{% endblock %}

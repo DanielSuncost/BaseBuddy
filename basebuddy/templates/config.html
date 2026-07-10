@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}System Configuration{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/config.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">System Configuration</h1>
+    <p class="page-subtitle">Advanced settings — new here? Start on the <a href="/config/setup">Getting Started</a> tab.</p>
+</div>
+
+{% if success_message %}
+    {% if 'Error' in success_message %}
+    <div class="alert alert-danger">{{ success_message }}</div>
+    {% else %}
+    <div class="alert alert-success">{{ success_message }}</div>
+    {% endif %}
+{% endif %}
+
+<div class="card config-form">
+    <form method="POST">
+        <div class="config-section">
+            <div class="section-title"><span class="material-icons-outlined">videocam</span> Camera Configuration</div>
+            {% for i in range(1, (cam_count or 4) + 1) %}
+            <div class="config-group">
+                <label for="cam{{ i }}_url">Camera {{ i }} URL</label>
+                <input type="text" id="cam{{ i }}_url" name="cam{{ i }}_url" 
+                       value="{{ config.get('CAM' ~ i, '') }}" 
+                       placeholder="rtsp://username:password@ip:port/stream">
+                <small class="text-muted">Leave empty to disable camera {{ i }}</small>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="config-section">
+            <div class="section-title"><span class="material-icons-outlined">smart_toy</span> AI & Detection Settings</div>
+            <div class="config-grid-2">
+                <div class="config-group">
+                    <label for="ai_model">AI Model</label>
+                    <input type="text" id="ai_model" name="ai_model" 
+                           value="{{ config.get('AI_MODEL', 'yolov8n.pt') }}" 
+                           placeholder="yolov8n.pt">
+                    <small class="text-muted">YOLO model file to use (e.g. yolov8n.pt, yolov8s.pt)</small>
+                </div>
+                <div class="config-group">
+                    <label for="ai_conf">Confidence Threshold</label>
+                    <input type="number" id="ai_conf" name="ai_conf" 
+                           value="{{ config.get('AI_CONF', '0.35') }}" 
+                           min="0" max="1" step="0.01">
+                    <small class="text-muted">Minimum confidence score (0.0 - 1.0)</small>
+                </div>
+            </div>
+
+            <div class="config-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="detection_enabled" name="detection_enabled" 
+                           {% if config.get('DETECTION_ENABLED', 'false') == 'true' %}checked{% endif %}>
+                    <span>Enable Object Detection</span>
+                </label>
+                <small class="text-muted config-checkbox-hint">Toggle AI processing on or off globally</small>
+            </div>
+
+            <div id="models-setup" class="models-setup card-inset">
+                <div class="models-setup-header">
+                    <div>
+                        <strong>Model weights</strong>
+                        <p class="text-muted models-setup-sub">Checks your GPU and memory, then downloads the right YOLO weights locally.</p>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="models-download-btn" disabled>
+                        <span class="material-icons-outlined">download</span>
+                        Download recommended
+                    </button>
+                </div>
+                <div id="models-system" class="models-system">
+                    <span class="models-badge models-badge-loading">Checking system…</span>
+                </div>
+                <ul id="models-list" class="models-list"></ul>
+                <p id="models-message" class="models-message text-muted" hidden></p>
+            </div>
+
+            <div id="inference-setup" class="models-setup card-inset inference-setup">
+                <div class="section-title section-title-flush">
+                    <span class="material-icons-outlined">cloud</span> AI inference backend
+                </div>
+                <p class="text-muted models-setup-sub">Local GPU (free) or BaseBuddy Cloud (paid). Hybrid falls back to cloud when GPU is busy.</p>
+                <div class="config-grid-2">
+                    <div class="config-group">
+                        <label for="inference-mode">Mode</label>
+                        <select id="inference-mode">
+                            <option value="local">Local (your GPU / CPU)</option>
+                            <option value="cloud">Cloud only</option>
+                            <option value="hybrid">Hybrid (local + cloud fallback)</option>
+                        </select>
+                    </div>
+                    <div class="config-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="inference-hybrid">
+                            <span>Cloud fallback when GPU busy</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="config-grid-2 mt-4">
+                    <div class="config-group">
+                        <label for="inference-endpoint">Cloud endpoint</label>
+                        <input type="url" id="inference-endpoint" placeholder="https://api.basebuddy.io/v1">
+                    </div>
+                    <div class="config-group">
+                        <label for="inference-api-key">Cloud API key</label>
+                        <input type="password" id="inference-api-key" placeholder="Leave blank to keep existing" autocomplete="off">
+                    </div>
+                </div>
+                <p id="inference-status" class="models-message text-muted"></p>
+                <button type="button" class="btn btn-secondary" id="inference-save">Save inference settings</button>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-title"><span class="material-icons-outlined">dns</span> Server Settings</div>
+            <div class="config-grid-2">
+                <div class="config-group">
+                    <label for="host">Host Address</label>
+                    <input type="text" id="host" name="host" value="{{ config.get('HOST', '0.0.0.0') }}">
+                    <small class="text-muted">Bind address (0.0.0.0 for all interfaces)</small>
+                </div>
+                <div class="config-group">
+                    <label for="port">Port</label>
+                    <input type="number" id="port" name="port" value="{{ config.get('PORT', '5000') }}" min="1" max="65535">
+                    <small class="text-muted">Server listening port</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="section-title"><span class="material-icons-outlined">movie</span> Recording Settings</div>
+            <div class="config-grid-2">
+                <div class="config-group">
+                    <label for="seg_minutes">Segment Duration (min)</label>
+                    <input type="number" id="seg_minutes" name="seg_minutes" 
+                           value="{{ config.get('SEG_MINUTES', '15') }}" min="1">
+                    <small class="text-muted">Length of each video segment file</small>
+                </div>
+                <div class="config-group">
+                    <label for="retention_days">Retention Period (days)</label>
+                    <input type="number" id="retention_days" name="retention_days" 
+                           value="{{ config.get('RETENTION_DAYS', '7') }}" min="0">
+                    <small class="text-muted">Auto-delete recordings older than this (0 = keep forever)</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="submit-container">
+            <button type="submit" class="btn btn-success">
+                <span class="material-icons-outlined">save</span> Save Configuration
+            </button>
+        </div>
+    </form>
+</div>
+<script src="{{ url_for('static', filename='js/config_models.js') }}"></script>
+<script src="{{ url_for('static', filename='js/config_inference.js') }}"></script>
+{% endblock %}

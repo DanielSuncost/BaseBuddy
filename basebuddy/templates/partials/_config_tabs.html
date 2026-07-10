@@ -1,0 +1,10 @@
+{% if active_page == 'config' or active_config_tab %}
+<div class="config-tabs">
+    {% for tab in config_tabs %}
+    <a href="{{ tab.href }}" class="config-tab {% if active_config_tab == tab.id %}active{% endif %}">
+        <span class="material-icons-outlined">{{ tab.icon }}</span>
+        {{ tab.label }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}

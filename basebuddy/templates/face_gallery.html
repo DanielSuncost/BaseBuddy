@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Face Gallery{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/face_gallery.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>Face Gallery</h2>
+        <small class="text-muted">Manage and organize detected faces</small>
+    </div>
+    <div>
+        <a href="/people" class="btn btn-secondary">Back to People</a>
+    </div>
+</div>
+
+<!-- Tab Navigation -->
+<ul class="nav nav-tabs mb-4" id="faceGalleryTabs" role="tablist" style="display: flex; flex-direction: row; flex-wrap: nowrap;">
+    <li class="nav-item" role="presentation" style="flex: 0 0 auto;">
+        <button class="nav-link active" id="gallery-tab" data-bs-target="#gallery-pane" type="button" role="tab" aria-controls="gallery-pane" aria-selected="true">
+            📷 Face Gallery
+        </button>
+    </li>
+    <li class="nav-item" role="presentation" style="flex: 0 0 auto;">
+        <button class="nav-link" id="similarity-tab" data-bs-target="#similarity-pane" type="button" role="tab" aria-controls="similarity-pane" aria-selected="false">
+            🔗 Similarity Clusters
+        </button>
+    </li>
+    <li class="nav-item" role="presentation" style="flex: 0 0 auto;">
+        <button class="nav-link" id="processed-tab" data-bs-target="#processed-pane" type="button" role="tab" aria-controls="processed-pane" aria-selected="false">
+            ✓ Processed Faces
+        </button>
+    </li>
+    <li class="nav-item" role="presentation" style="flex: 0 0 auto;">
+        <button class="nav-link" id="known-tab" data-bs-target="#known-pane" type="button" role="tab" aria-controls="known-pane" aria-selected="false">
+            👤 Known People
+        </button>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content" id="faceGalleryTabContent">
+    <!-- Tab 1: Face Gallery (All Detections) -->
+    <div class="tab-pane fade show active" id="gallery-pane" role="tabpanel" aria-labelledby="gallery-tab" style="display: block;">
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4>All Face Detections</h4>
+                    <small class="text-muted">Person detections that may contain faces. Click "Scan for New Faces" to process them.</small>
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary me-2" onclick="scanForNewFaces()">Scan for New Faces</button>
+                </div>
+            </div>
+            
+            <!-- Selection Controls -->
+            <div class="mb-3" id="selectionControls" style="display:none;">
+                <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span id="selectionCount">0 faces selected</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="selectAllFaces()">Select All</button>
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="deselectAllFaces()">Deselect All</button>
+                        <button class="btn btn-sm btn-danger" id="deleteSelectedBtn" onclick="deleteSelectedFaces()">Delete Selected</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Face Gallery Grid -->
+        <div id="face-gallery">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Tab 2: Similarity Clusters (For Cleanup) -->
+    <div class="tab-pane fade" id="similarity-pane" role="tabpanel" aria-labelledby="similarity-tab" style="display: none;">
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4>Similarity Clusters</h4>
+                    <small class="text-muted">Groups of similar faces. Use this to find and delete duplicate/near-duplicate images.</small>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="mb-0">Threshold:</label>
+                        <input type="range" class="form-range" id="similarityThreshold" min="0.5" max="0.95" step="0.05" value="0.85" style="width:200px;" oninput="document.getElementById('thresholdValue').textContent = this.value">
+                        <span class="badge bg-secondary" id="thresholdValue">0.85</span>
+                        <button class="btn btn-warning" id="clusterBySimilarityBtn" onclick="clusterBySimilarity(event)">Cluster</button>
+                    </div>
+                    <small class="text-muted d-block mt-1">Lower = more similar (0.5) | Higher = less similar (0.95)</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Similarity Clusters Display -->
+        <div id="similarity-clusters-list" class="row">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <p class="mb-0">Click "Cluster" above to find groups of similar faces. This helps you identify and remove duplicate images.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 3: Processed Faces (With Embeddings) -->
+    <div class="tab-pane fade" id="processed-pane" role="tabpanel" aria-labelledby="processed-tab" style="display: none;">
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4>Processed Faces</h4>
+                    <small class="text-muted">Faces that have been processed and have embeddings. These are used for recognition.</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Processed Faces Grid -->
+        <div id="processed-faces-gallery">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Tab 4: Known People -->
+    <div class="tab-pane fade" id="known-pane" role="tabpanel" aria-labelledby="known-tab" style="display: none;">
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4>Known People</h4>
+                    <small class="text-muted">People that have been identified and labeled.</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Known People Grid -->
+        <div id="known-people-gallery" class="row">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- Cluster Management Modal -->
+<div id="clusterManagementModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Manage Clusters</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cluster-list">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Face Modal -->
+<div id="faceModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="faceModalTitle">Face Detection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-3">
+                    <img id="faceModalImg" src="" class="img-fluid" alt="Face image" style="max-height: 60vh;">
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Camera:</strong> <span id="faceModalCamera"></span></p>
+                        <p><strong>Timestamp:</strong> <span id="faceModalTime"></span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Confidence:</strong> <span id="faceModalConfidence"></span></p>
+                        <p><strong>Status:</strong> <span id="faceModalStatus"></span></p>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-success me-2" id="faceModalAddToLibrary">Add to Library</button>
+                    <button class="btn btn-sm btn-warning me-2" onclick="findSimilarFaces()">Find Similar Faces</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/face_gallery.js') }}"></script>
+{% endblock %}

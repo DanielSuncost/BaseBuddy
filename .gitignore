@@ -1,0 +1,175 @@
+# BaseBuddy .gitignore
+# Essential files for clean open source repository
+
+#=============================================================================
+# RUNTIME DATA - All user data, recordings, and generated files
+#=============================================================================
+/data/
+# This includes:
+#   - recordings/
+#   - timelapse_output/
+#   - stills/
+#   - logs/
+#   - models/ (AI weights)
+#   - *.db (analytics database)
+#   - camera_profiles.json
+#   - timelapse_schedules.json
+
+#=============================================================================
+# PYTHON
+#=============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments (pip, venv, uv)
+venv/
+env/
+ENV/
+virtualenv/
+.venv/
+.uv/
+
+#=============================================================================
+# AI/ML MODEL FILES (keep models/README.md)
+#=============================================================================
+/models/*
+!/models/README.md
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.weights
+*.h5
+*.pb
+
+#=============================================================================
+# MEDIA & GENERATED DATA
+#=============================================================================
+# Runtime data lives at the repo root; anchor these so we don't accidentally
+# ignore application packages named e.g. basebuddy/pages/recordings/.
+/media/
+/stills/
+/timelapse_output/
+/recordings/
+/logs/
+/multiview_data/
+/basebuddy/media/
+/basebuddy/stills/
+/basebuddy/recordings/
+/basebuddy/logs/
+/basebuddy/multiview_data/
+/basebuddy/timelapse_output/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+analytics.db
+detections.db
+camera_profiles.json
+timelapse_schedules.json
+camera_wall_state.json
+config.txt
+
+# Legacy monolith (keep archive/README.md only)
+/archive/main_legacy.py
+
+# Private / commercial overlays — not part of the OSS artifact
+/premium/
+/hosted/
+
+#=============================================================================
+# ENVIRONMENT & SECRETS
+#=============================================================================
+.env
+.env.local
+.env.*.local
+config_local.py
+secrets.py
+
+# Runtime state
+.archive_state.json
+.retention_state.json
+.pid
+libdevice.10.bc
+sam_prompt_configs/
+
+# Generated / local-only dirs
+/mask_schedules/
+/training_datasets/
+/training_runs/
+/static/
+/video_thumbs/
+basebuddy/static/video_thumbs/
+
+#=============================================================================
+# IDE & EDITOR
+#=============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+#=============================================================================
+# OS FILES
+#=============================================================================
+.DS_Store
+._*
+Thumbs.db
+
+#=============================================================================
+# TEMPORARY & BACKUP
+#=============================================================================
+*.tmp
+*.bak
+*.backup
+/tmp/
+backup_*/
+nohup.out
+
+#=============================================================================
+# TEST & COVERAGE
+#=============================================================================
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+#=============================================================================
+# DOCUMENTATION BUILD
+#=============================================================================
+docs/_build/
+site/
+
+#=============================================================================
+# MAINTAINER DOCS (local only — not published)
+#=============================================================================
+docs/PUBLISH.md
+docs/RELEASE-1.0.md
+docs/ROADMAP.md
+docs/MIGRATION-0.1.md
+PRIORITIES.md
+
+#=============================================================================
+# DEVELOPMENT SCRIPTS (not shipped)
+#=============================================================================
+TEST_*.sh
+prepare_for_publish.sh
+setup_data_structure.sh
+show_status.sh
+status.sh
+camera_network_*.sh
+scan_rtsp.sh
+check_routing.sh
+install_network_service.sh
+setup_network.sh
+free_memory.sh
+set_env.sh

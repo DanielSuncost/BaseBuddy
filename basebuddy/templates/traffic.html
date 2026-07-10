@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Traffic Analytics{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/traffic.css') }}">
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <h1 class="page-title"><span class="material-icons-outlined">traffic</span> Traffic</h1>
+    <p class="page-subtitle">
+        Vehicle track counts, direction flow, and speed estimates.
+        Calibration: {{ px_per_m }} px/m (<code>PX_PER_M</code>).
+    </p>
+</div>
+
+<div class="card traffic-controls">
+    <div class="traffic-filter">
+        <label for="traffic-cam-select">Camera</label>
+        <select id="traffic-cam-select"><option value="">Loading…</option></select>
+    </div>
+    <div class="traffic-filter">
+        <label for="traffic-region-select">Region</label>
+        <select id="traffic-region-select"><option value="">All regions</option></select>
+    </div>
+    <div class="traffic-filter">
+        <label for="traffic-class-select">Object class</label>
+        <select id="traffic-class-select"><option value="">All classes</option></select>
+    </div>
+    <div class="traffic-filter">
+        <label for="traffic-date-input">Date</label>
+        <input type="date" id="traffic-date-input">
+    </div>
+</div>
+
+<div class="traffic-grid">
+    <div class="card">
+        <div class="card-header">Hourly volume</div>
+        <canvas id="traffic-hourly-chart" height="200"></canvas>
+    </div>
+    <div class="card">
+        <div class="card-header">Direction flow</div>
+        <canvas id="traffic-direction-chart" height="200"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header traffic-flowmap-header">
+        <span>Flow map</span>
+        <span class="traffic-flowmap-controls">
+            <label for="traffic-flow-window">Window</label>
+            <select id="traffic-flow-window">
+                <option value="15">Last 15 min</option>
+                <option value="60" selected>Last hour</option>
+                <option value="180">Last 3 hours</option>
+                <option value="360">Last 6 hours</option>
+                <option value="720">Last 12 hours</option>
+                <option value="1440">Last 24 hours</option>
+            </select>
+            <button type="button" id="traffic-flow-refresh" class="btn btn-secondary btn-sm">Refresh</button>
+        </span>
+    </div>
+    <p class="muted traffic-setup-hint">
+        Every recorded track in the selected window drawn over the live frame.
+        Trace color shows direction of travel; arrowheads mark where each object exited.
+    </p>
+    <div class="traffic-flowmap-wrap">
+        <img id="traffic-flow-img" alt="Traffic flow map" />
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Recent tracks</div>
+    <div id="traffic-recent" class="traffic-recent"><p class="muted">Loading…</p></div>
+</div>
+
+<div class="card">
+    <div class="card-header">Camera setup</div>
+    <p class="muted traffic-setup-hint">
+        Traffic capture runs on any camera with an <strong>analytics region</strong>.
+        "Enable" adds a full-frame region; for specific lanes or intersections, draw
+        custom regions in the camera's detail page (regions also control notifications).
+        Objects tracked follow each camera's detection classes
+        (<a href="/config/disabled-classes">Config &rarr; Detection Classes</a>).
+    </p>
+    <div id="traffic-setup"><p class="muted">Loading…</p></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/traffic.js') }}"></script>
+{% endblock %}

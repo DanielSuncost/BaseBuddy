@@ -1,0 +1,240 @@
+openapi: 3.1.0
+info:
+  title: BaseBuddy Cloud API
+  version: 1.0.0
+  description: |
+    Managed inference and training for BaseBuddy self-hosted installs.
+    Proprietary service — OSS client in `core/inference/cloud/client.py`.
+servers:
+  - url: https://api.basebuddy.io/v1
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    BoundingBox:
+      type: object
+      required: [x1, y1, x2, y2]
+      properties:
+        x1: { type: number }
+        y1: { type: number }
+        x2: { type: number }
+        y2: { type: number }
+
+    Detection:
+      type: object
+      properties:
+        bbox: { $ref: '#/components/schemas/BoundingBox' }
+        class_id: { type: integer }
+        class_name: { type: string }
+        confidence: { type: number }
+
+    DetectRequest:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+          format: byte
+          description: Base64-encoded JPEG or PNG
+        camera_id: { type: integer }
+        model_id: { type: string, default: yolov8s }
+        conf_threshold: { type: number, default: 0.35 }
+        instance_id: { type: string, format: uuid }
+
+    DetectResponse:
+      type: object
+      properties:
+        detections:
+          type: array
+          items: { $ref: '#/components/schemas/Detection' }
+        inference_ms: { type: number }
+        model_id: { type: string }
+        usage: { $ref: '#/components/schemas/UsageChunk' }
+
+    SegmentRequest:
+      type: object
+      required: [image, points, labels]
+      properties:
+        image: { type: string, format: byte }
+        points:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+            minItems: 2
+            maxItems: 2
+        labels:
+          type: array
+          items: { type: integer, enum: [0, 1] }
+        model_id: { type: string, default: sam_vit_b }
+
+    SegmentResponse:
+      type: object
+      properties:
+        mask: { type: string, format: byte, description: Base64 PNG mask }
+        coverage: { type: number }
+        inference_ms: { type: number }
+        usage: { $ref: '#/components/schemas/UsageChunk' }
+
+    ClassifyRequest:
+      type: object
+      required: [image, model_id]
+      properties:
+        image: { type: string, format: byte }
+        model_id: { type: string }
+
+    ClassifyResponse:
+      type: object
+      properties:
+        label: { type: string }
+        confidence: { type: number }
+        inference_ms: { type: number }
+        usage: { $ref: '#/components/schemas/UsageChunk' }
+
+    TrainingJobRequest:
+      type: object
+      required: [dataset_id, base_model]
+      properties:
+        dataset_id: { type: string, format: uuid }
+        base_model: { type: string }
+
+    TrainingJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        base_model: { type: string }
+        result_model_id: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+
+    UsageChunk:
+      type: object
+      properties:
+        frames_consumed: { type: integer }
+        quota_remaining: { type: integer, nullable: true }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string }
+
+paths:
+  /health:
+    get:
+      security: []
+      summary: Service liveness
+      responses:
+        '200':
+          description: OK
+
+  /account/usage:
+    get:
+      summary: Current billing period usage
+      responses:
+        '200':
+          description: Usage summary
+
+  /inference/detect:
+    post:
+      summary: Object detection on a single frame
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DetectRequest' }
+      responses:
+        '200':
+          description: Detections
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DetectResponse' }
+        '402':
+          description: Quota exceeded
+
+  /inference/segment:
+    post:
+      summary: SAM-style segmentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SegmentRequest' }
+      responses:
+        '200':
+          description: Mask
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SegmentResponse' }
+
+  /inference/classify:
+    post:
+      summary: ROI classifier (pantry slot, custom home model)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClassifyRequest' }
+      responses:
+        '200':
+          description: Label
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClassifyResponse' }
+
+  /training/jobs:
+    post:
+      summary: Start a fine-tuning job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingJobRequest' }
+      responses:
+        '202':
+          description: Job queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrainingJob' }
+
+  /training/jobs/{job_id}:
+    get:
+      summary: Training job status
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrainingJob' }
+
+  /models:
+    get:
+      summary: List deployable model IDs for this account
+      responses:
+        '200':
+          description: Model list
+
+  /models/{model_id}:
+    delete:
+      summary: Delete a personalized model and training data
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Deleted

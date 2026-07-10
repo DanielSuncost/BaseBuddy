@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Recording Playback{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/recordings.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Recording Playback</h1>
+    <p class="page-subtitle">Browse clips by time range or jump to each camera's latest footage</p>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+    <span class="material-icons-outlined">error</span>
+    <div>
+        <strong>Error</strong>
+        <p class="alert-body">Error loading recordings: {{ error }}</p>
+        <a href="/recordings" class="btn btn-primary btn-sm mt-4">Back to Recordings</a>
+    </div>
+</div>
+{% else %}
+
+<div class="rec-toolbar card-inset" id="recToolbar"
+     data-view="{{ view }}"
+     data-range="{{ range_preset }}"
+     data-from="{{ date_from }}"
+     data-to="{{ date_to }}"
+     {% if camera_id is not none %}data-cam="{{ camera_id }}"{% endif %}>
+
+    <div class="rec-toolbar-row">
+        <div class="rec-view-toggle" role="group" aria-label="View mode">
+            <button type="button" class="rec-view-btn{% if view == 'clips' %} active{% endif %}" data-view="clips" title="All clips">
+                <span class="material-icons-outlined">grid_view</span>
+                <span class="rec-view-label">All clips</span>
+            </button>
+            <button type="button" class="rec-view-btn{% if view == 'cameras' %} active{% endif %}" data-view="cameras" title="By camera">
+                <span class="material-icons-outlined">videocam</span>
+                <span class="rec-view-label">Cameras</span>
+            </button>
+        </div>
+
+        <div class="rec-range-wrap">
+            <label class="rec-range-label" for="recRangePreset">Period</label>
+            <select id="recRangePreset" class="rec-range-select">
+                <option value="today"{% if range_preset == 'today' or range_preset == 'day' %} selected{% endif %}>Today</option>
+                <option value="7d"{% if range_preset == '7d' %} selected{% endif %}>Past 7 days</option>
+                <option value="30d"{% if range_preset == '30d' %} selected{% endif %}>Past 30 days</option>
+                <option value="custom"{% if range_preset == 'custom' %} selected{% endif %}>Custom range</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="recCustomRange" class="rec-custom-range{% if range_preset != 'custom' %} hidden{% endif %}">
+        <label class="rec-range-label" for="recDateFrom">From</label>
+        <input type="date" id="recDateFrom" class="rec-date-input" value="{{ date_from }}" max="{{ today }}">
+        <label class="rec-range-label" for="recDateTo">To</label>
+        <input type="date" id="recDateTo" class="rec-date-input" value="{{ date_to }}" max="{{ today }}">
+        <button type="button" class="btn btn-primary btn-sm" id="recApplyCustom">Apply</button>
+    </div>
+
+    <div class="rec-toolbar-meta">
+        <span class="rec-range-summary">{{ range_label }}</span>
+        {% if view == 'clips' %}
+        <span class="rec-count-badge">{{ recording_count }} clip{% if recording_count != 1 %}s{% endif %}{% if camera_id is not none %} · Camera {{ camera_id + 1 }}{% endif %}</span>
+        {% else %}
+        <span class="rec-count-badge">{{ camera_count }} camera{% if camera_count != 1 %}s{% endif %} with recordings</span>
+        {% endif %}
+        {% if camera_id is not none %}
+        <a href="#" class="btn btn-ghost btn-sm" id="recClearCamFilter">Show all cameras</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="video-container" id="videoContainer">
+    <video id="videoPlayer" controls>
+        Your browser does not support the video tag.
+    </video>
+    <div class="video-controls">
+        <span id="nowPlaying">Now Playing</span>
+        <button type="button" onclick="closePlayer()" class="btn btn-sm btn-secondary close-btn">Close</button>
+    </div>
+</div>
+
+<div class="card rec-content-card">
+    {% if view == 'cameras' %}
+    <div class="recording-grid camera-grid">
+        {% if camera_summaries %}
+            {% for cam in camera_summaries %}
+            <div class="card recording-card camera-summary-card">
+                <a href="/recordings?view=clips&amp;range={{ range_preset }}&amp;from={{ date_from }}&amp;to={{ date_to }}&amp;cam={{ cam.camera_id }}" class="camera-card-link">
+                    {% if cam.thumbnail %}
+                    <img src="{{ cam.thumbnail }}" class="thumbnail" alt="{{ cam.camera }} latest recording">
+                    {% else %}
+                    <div class="thumbnail placeholder">
+                        <span class="material-icons-outlined">videocam</span>
+                    </div>
+                    {% endif %}
+                    <div class="recording-info">
+                        <div class="recording-title">{{ cam.camera }}</div>
+                        <div class="recording-meta">
+                            <span class="material-icons-outlined icon-sm">movie</span>
+                            {{ cam.clip_count }} clip{% if cam.clip_count != 1 %}s{% endif %} in range
+                        </div>
+                        <div class="recording-meta">
+                            <span class="material-icons-outlined icon-sm">schedule</span>
+                            Latest {{ cam.latest_date }} {{ cam.latest_time }}
+                        </div>
+                        <div class="recording-size">{{ cam.total_size }} total</div>
+                    </div>
+                </a>
+                <button type="button" onclick="playRecording('{{ cam.latest_path }}')" class="btn btn-primary btn-block">
+                    <span class="material-icons-outlined">play_arrow</span> Play latest
+                </button>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <span class="material-icons-outlined empty-icon">videocam_off</span>
+                <p>No cameras with recordings in this period.</p>
+            </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="recording-grid">
+        {% if recordings %}
+            {% for recording in recordings %}
+            <div class="card recording-card">
+                {% if recording.thumbnail %}
+                <img src="{{ recording.thumbnail }}" class="thumbnail" alt="Video thumbnail">
+                {% else %}
+                <div class="thumbnail placeholder">
+                    <span class="material-icons-outlined">videocam</span>
+                </div>
+                {% endif %}
+                <div class="recording-info">
+                    <div class="recording-title">{{ recording.filename }}</div>
+                    <div class="recording-meta">
+                        <span class="material-icons-outlined icon-sm">videocam</span> {{ recording.camera }}
+                    </div>
+                    <div class="recording-meta">
+                        <span class="material-icons-outlined icon-sm">calendar_today</span> {{ recording.date }} {{ recording.timestamp }}
+                    </div>
+                    <div class="recording-size">{{ recording.size }}</div>
+                </div>
+                <button type="button" onclick="playRecording('{{ recording.path }}')" class="btn btn-primary btn-block">
+                    <span class="material-icons-outlined">play_arrow</span> Play
+                </button>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <span class="material-icons-outlined empty-icon">videocam_off</span>
+                <p>No recordings found for {{ range_label }}.</p>
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/recordings.js') }}"></script>
+{% endblock %}

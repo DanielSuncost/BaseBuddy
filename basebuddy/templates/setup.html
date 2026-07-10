@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Configuration{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup.css') }}">
+{% endblock %}
+{% block content %}
+<div class="setup-page">
+    <div class="setup-header">
+        <h1 class="page-title"><span class="material-icons-outlined">rocket_launch</span> Getting started</h1>
+        <p class="page-subtitle">Connect cameras and Telegram alerts — then use <a href="/config">Settings</a> for advanced options.</p>
+    </div>
+
+    <div class="setup-progress card">
+        <div class="setup-progress-bar"><div id="setup-progress-fill"></div></div>
+        <span id="setup-progress-label" class="setup-progress-label">Loading…</span>
+    </div>
+
+    <div class="setup-steps">
+        <!-- Step 1: Cameras -->
+        <section class="card setup-step" id="step-camera" data-step="camera">
+            <div class="setup-step-head">
+                <span class="setup-step-num">1</span>
+                <div>
+                    <h2>Camera stream</h2>
+                    <p class="setup-step-desc">Paste an RTSP URL from your camera or NVR. Restart may be required after saving.</p>
+                </div>
+                <span class="setup-step-check material-icons-outlined" hidden>check_circle</span>
+            </div>
+            <div class="setup-step-body">
+                <label>Primary camera (RTSP)
+                    <input type="text" id="setup-cam1" placeholder="rtsp://user:pass@192.168.1.10:554/stream1" autocomplete="off">
+                </label>
+                <label>Second camera <span class="setup-optional">optional</span>
+                    <input type="text" id="setup-cam2" placeholder="Leave empty to skip" autocomplete="off">
+                </label>
+                <label class="setup-switch">
+                    <input type="checkbox" id="setup-detection" checked>
+                    Enable AI object detection
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="setup-save-cameras">Save cameras</button>
+            </div>
+        </section>
+
+        <!-- Step 2: Telegram -->
+        <section class="card setup-step" id="step-telegram" data-step="telegram">
+            <div class="setup-step-head">
+                <span class="setup-step-num">2</span>
+                <div>
+                    <h2>Telegram notifications</h2>
+                    <p class="setup-step-desc">Detection snapshots are sent directly to Telegram — no public URL needed.</p>
+                </div>
+                <span class="setup-step-check material-icons-outlined" hidden>check_circle</span>
+            </div>
+            <div class="setup-step-body">
+                <details class="setup-guide" open>
+                    <summary>How to get your bot token &amp; chat ID</summary>
+                    <ol class="setup-guide-list">
+                        <li>Open Telegram and message <strong>@BotFather</strong> → send <code>/newbot</code> → copy the <strong>bot token</strong>.</li>
+                        <li>Start a chat with your new bot (tap <strong>Start</strong>).</li>
+                        <li>Message <strong>@userinfobot</strong> or <strong>@getidsbot</strong> to get your numeric <strong>chat ID</strong>.</li>
+                        <li>Paste both below and click <strong>Test Telegram</strong>.</li>
+                    </ol>
+                </details>
+                <div class="setup-grid">
+                    <label>Bot token
+                        <input type="password" id="setup-telegram-token" placeholder="123456789:ABC…" autocomplete="off">
+                    </label>
+                    <label>Chat ID
+                        <input type="text" id="setup-telegram-chat" placeholder="123456789" autocomplete="off">
+                    </label>
+                </div>
+                <div class="setup-actions-row">
+                    <button type="button" class="btn btn-secondary btn-sm" id="setup-save-telegram">Save Telegram</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="setup-test-telegram">
+                        <span class="material-icons-outlined">send</span> Test Telegram
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Alerts -->
+        <section class="card setup-step" id="step-alerts" data-step="alerts">
+            <div class="setup-step-head">
+                <span class="setup-step-num">3</span>
+                <div>
+                    <h2>Alert rules</h2>
+                    <p class="setup-step-desc">We'll create a default rule: <em>person</em> detected → Telegram with snapshot.</p>
+                </div>
+                <span class="setup-step-check material-icons-outlined" hidden>check_circle</span>
+            </div>
+            <div class="setup-step-body">
+                <label class="setup-switch">
+                    <input type="checkbox" id="setup-create-rule" checked>
+                    Create default alert rule (person → Telegram on detection start)
+                </label>
+                <label class="setup-switch">
+                    <input type="checkbox" id="setup-fallback" checked>
+                    Also use global Telegram fallback when no rule matches
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="setup-save-alerts">Save alert settings</button>
+            </div>
+        </section>
+
+        <!-- Step 4: Done -->
+        <section class="card setup-step setup-done" id="step-done">
+            <div class="setup-step-head">
+                <span class="setup-step-num">4</span>
+                <div>
+                    <h2>You're all set</h2>
+                    <p class="setup-step-desc">Explore the app or fine-tune settings anytime.</p>
+                </div>
+            </div>
+            <div class="setup-step-body">
+                <div class="setup-links">
+                    <a href="/" class="btn btn-primary"><span class="material-icons-outlined">grid_view</span> Camera Wall</a>
+                    <a href="/events" class="btn btn-secondary"><span class="material-icons-outlined">history</span> Events</a>
+                    <a href="/integrations" class="btn btn-secondary"><span class="material-icons-outlined">hub</span> Integrations</a>
+                    <a href="/config" class="btn btn-secondary"><span class="material-icons-outlined">tune</span> Advanced settings</a>
+                </div>
+                <button type="button" class="btn btn-primary" id="setup-finish">
+                    <span class="material-icons-outlined">done</span> Finish setup
+                </button>
+                <p class="setup-note">Restart BaseBuddy if you added cameras — <code>./run.sh</code></p>
+            </div>
+        </section>
+    </div>
+
+    <p id="setup-toast" class="setup-toast" hidden></p>
+</div>
+<script src="{{ url_for('static', filename='js/setup.js') }}"></script>
+{% endblock %}
