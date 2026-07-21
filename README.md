@@ -5,6 +5,36 @@ AI-powered multi-camera surveillance with real-time object detection. Self-hoste
 **Version**: 1.0.0  
 **License**: MIT
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/images/camera-wall.jpg" alt="Camera Wall" />
+      <br /><sub>Camera Wall — live multi-camera grid</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/timelapse.jpg" alt="Timelapse" />
+      <br /><sub>Timelapse — browse frames &amp; export MP4/GIF</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/events.jpg" alt="Events" />
+      <br /><sub>Events — detection timeline with scores</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/images/plants.jpg" alt="Plants" />
+      <br /><sub>Plants — region setup &amp; health trends</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/traffic.jpg" alt="Traffic" />
+      <br /><sub>Traffic — hourly volume &amp; direction flow</sub>
+    </td>
+    <td width="33%"></td>
+  </tr>
+</table>
+
 ---
 
 ## Quick Start
