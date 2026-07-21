@@ -2,7 +2,7 @@
 import os
 
 from basebuddy.pages.timelapse.api import _safe_join
-from basebuddy.routes.plant_tracking import _safe_seg
+from basebuddy.routes.plant_tracking.helpers import _safe_seg
 
 
 class TestTimelapseSafeJoin:

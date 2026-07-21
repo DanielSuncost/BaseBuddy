@@ -2038,11 +2038,15 @@ def _run_reconstruction_job(progress_cb, engine, images, masks, camera_ids):
 @multiview_3d_bp.route('/api/multiview/engines')
 def api_list_engines():
     """List reconstruction engines and their availability."""
-    import torch
     from basebuddy.modules.multiview.engines import list_engines
+    try:
+        import torch
+        cuda_available = bool(torch.cuda.is_available())
+    except ImportError:
+        cuda_available = False
     return jsonify({
         'ok': True,
-        'cuda_available': torch.cuda.is_available(),
+        'cuda_available': cuda_available,
         'engines': list_engines(),
     })
 

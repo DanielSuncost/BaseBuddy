@@ -3,7 +3,6 @@
 import os
 import cv2
 import numpy as np
-import torch  # noqa: F401  (kept module-level to preserve original import-time behavior)
 
 from . import logger
 from .helpers import get_sam_predictor
