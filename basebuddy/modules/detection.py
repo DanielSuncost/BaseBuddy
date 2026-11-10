@@ -1,6 +1,4 @@
-"""
-Detection and tracking logic (YOLO + Supervision).
-"""
+"""Per-camera YOLO detection and tracking."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,6 +57,7 @@ class DetectionTracker:
 
         self.last_detections = []
         self._store_region_labels = []
+        self._tracker_empty_streak = 0
         
         # Person Classifier & Pose
         self.classifier = None
@@ -114,19 +113,49 @@ class DetectionTracker:
             from basebuddy.core.inference import get_inference_router
             get_inference_router().release_camera(self.cam_id)
 
+    def _create_byte_tracker(self):
+        """ByteTrack tuned for detection-rate updates (not 30 FPS video)."""
+        import supervision as sv
+        try:
+            from .config import DETECTION_ACTIVE_FPS
+            frame_rate = max(1, int(round(float(DETECTION_ACTIVE_FPS) or 4)))
+        except Exception:
+            frame_rate = 4
+        # At low detection FPS objects move farther between updates, so loosen
+        # IoU matching and keep a short lost-track buffer in wall-clock time.
+        return sv.ByteTrack(
+            track_activation_threshold=0.25,
+            lost_track_buffer=max(8, int(self.max_track_age)),
+            minimum_matching_threshold=0.5,
+            frame_rate=frame_rate,
+            minimum_consecutive_frames=1,
+        )
+
     def _ensure_model_loaded(self):
         try:
-            import supervision as sv
             self._provider  # lazy-load YOLO via inference provider
             self.load_adaptive_thresholds()
             self.current_model_name = "day"
-            from .config import TRACKER_TYPE
-            if TRACKER_TYPE == "bytetrack":
-                self.tracker = sv.ByteTrack()
-            else:
-                self.tracker = sv.ByteTrack()
+            self.tracker = self._create_byte_tracker()
         except Exception as e:
             logger.info(f"Model load error: {e}")
+
+    def _clear_live_detections(self):
+        """Drop cached boxes so overlays disappear as soon as the track is gone."""
+        self.last_detections = []
+        self._store_region_labels = []
+
+    def _age_out_tracker(self):
+        """Feed an empty update so ByteTrack can expire lost tracks."""
+        if not self.tracker:
+            return
+        import supervision as sv
+        empty = sv.Detections.empty()
+        try:
+            self.tracker.update_with_detections(empty)
+        except Exception:
+            pass
+        self.update_track_history(empty)
             
     def set_classifier(self, classifier):
         self.classifier = classifier
@@ -276,16 +305,24 @@ class DetectionTracker:
 
     def enhance_night_frame(self, frame: np.ndarray) -> np.ndarray:
         try:
-            from .config import NIGHT_ENHANCEMENT, NIGHT_GAMMA
+            from .config import NIGHT_ENHANCEMENT, NIGHT_GAMMA, NIGHT_CLAHE_CLIP
             if not NIGHT_ENHANCEMENT:
                 return frame
             # Convention: gamma < 1.0 brightens, gamma > 1.0 darkens
             gamma = max(0.1, float(NIGHT_GAMMA))
             table = (np.array([((i / 255.0) ** gamma) * 255 for i in range(256)])
                      .clip(0, 255).astype("uint8"))
-            return cv2.LUT(frame, table)
+            enhanced = cv2.LUT(frame, table)
+            clip = float(NIGHT_CLAHE_CLIP)
+            if clip > 0:
+                lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+                l_ch, a_ch, b_ch = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
+                l_ch = clahe.apply(l_ch)
+                enhanced = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+            return enhanced
         except Exception as e:
-            logger.info(f"Error in gamma adjustment: {e}")
+            logger.info(f"Error in night enhancement: {e}")
             return frame
 
     def calculate_brightness(self, frame: np.ndarray) -> float:
@@ -334,9 +371,14 @@ class DetectionTracker:
 
     def should_switch_to_night_mode(self, brightness: float) -> bool:
         from .config import DARK_THRESHOLD
+        # Brightness is authoritative. Time-of-day only tips borderline scenes so
+        # a well-lit indoor room after 22:00 does not force the night model.
+        if brightness < DARK_THRESHOLD:
+            return True
+        if brightness > DARK_THRESHOLD + 0.15:
+            return False
         current_hour = datetime.now().hour
-        is_night_time = current_hour < 6 or current_hour > 22
-        return brightness < DARK_THRESHOLD or is_night_time
+        return current_hour < 6 or current_hour > 22
 
     def switch_model_if_needed(self, frame: np.ndarray):
         brightness = self.calculate_brightness(frame)
@@ -414,21 +456,25 @@ class DetectionTracker:
             self.track_line_length = int(config['track_line_length'])
         logger.info(f"Updated tracking config for camera {self.cam_id}: {config}")
 
+    def clear_tracks(self):
+        """Clear visible track state without recreating the ByteTrack instance."""
+        self.track_history.clear()
+        self.track_colors.clear()
+        self.track_names.clear()
+        self.track_classes.clear()
+        self._clear_live_detections()
+        logger.info(f"Cleared tracks for camera {self.cam_id}")
+
     def reset_tracker(self):
         try:
-            if self.tracker:
-                import supervision as sv
-                from .config import TRACKER_TYPE
-                if TRACKER_TYPE == "bytetrack":
-                    self.tracker = sv.ByteTrack()
-                elif TRACKER_TYPE == "deepsort":
-                    self.tracker = sv.ByteTrack()
-                else:
-                    self.tracker = sv.ByteTrack()
-                self.track_history.clear()
-                self.track_colors.clear()
-                self.frame_count = 0
-                logger.info(f"Reset tracker for camera {self.cam_id}")
+            self.tracker = self._create_byte_tracker()
+            self.track_history.clear()
+            self.track_colors.clear()
+            self.track_names.clear()
+            self.track_classes.clear()
+            self._clear_live_detections()
+            self.frame_count = 0
+            logger.info(f"Reset tracker for camera {self.cam_id}")
         except Exception as e:
             logger.info(f"Error resetting tracker for camera {self.cam_id}: {e}")
 
@@ -481,7 +527,11 @@ class DetectionTracker:
                             pass
         self.frame_count += 1
         if self.frame_count % self.track_cleanup_interval == 0:
-            stale_before = time.time() - (self.max_track_age / 30.0)
+            # Wall-clock stale window: max_track_age was historically "frames at
+            # 30 FPS" (÷30 ⇒ 1s). At detection-rate updates that drops trails
+            # between slow passes — keep at least several seconds.
+            stale_sec = max(5.0, float(self.max_track_age) / 30.0 * 8.0)
+            stale_before = time.time() - stale_sec
             finalized_tracks = []
             for t_id, pts in list(self.track_history.items()):
                 if not pts:
@@ -562,15 +612,19 @@ class DetectionTracker:
         try:
             from basebuddy.core.inference import get_inference_router
             from basebuddy.core.inference.exceptions import ResourceExhausted
+            import supervision as sv
 
             self.switch_model_if_needed(frame)
             processed_frame = frame
             if self.is_dark_mode:
                 processed_frame = self.enhance_night_frame(frame)
 
+            # Run inference on the enhanced frame in dark mode so night
+            # preprocessing actually affects detections (not just display).
+            inference_frame = processed_frame if self.is_dark_mode else frame
             try:
                 inference_result = get_inference_router().detect(
-                    frame,
+                    inference_frame,
                     camera_id=self.cam_id,
                     is_dark_mode=self.is_dark_mode,
                 )
@@ -591,17 +645,22 @@ class DetectionTracker:
             except Exception:
                 pass
 
-            if not inference_result.detections:
+            def _empty_result():
+                self._clear_live_detections()
+                self._age_out_tracker()
                 return frame, []
+
+            if not inference_result.detections:
+                return _empty_result()
 
             boxes = np.array([d.bbox.as_xyxy() for d in inference_result.detections])
             class_ids = np.array([d.class_id for d in inference_result.detections], dtype=int)
             confidences = np.array([d.confidence for d in inference_result.detections])
             if len(boxes) == 0 or len(class_ids) == 0 or len(confidences) == 0:
-                return frame, []
+                return _empty_result()
             if len(boxes) != len(class_ids) or len(class_ids) != len(confidences):
                 logger.info(f"Detection data shape mismatch: boxes={len(boxes)}, class_ids={len(class_ids)}, confidences={len(confidences)}")
-                return frame, []
+                return _empty_result()
             high_conf_mask = []
             for i, (class_id, conf) in enumerate(zip(class_ids, confidences)):
                 try:
@@ -637,21 +696,47 @@ class DetectionTracker:
                 confidences = confidences[high_conf_mask]
             except (IndexError, TypeError) as e:
                 logger.info(f"Error applying detection filter mask: {e}")
-                return frame, []
+                return _empty_result()
             if len(boxes) == 0:
-                return frame, []
-            import supervision as sv
+                return _empty_result()
+
             detections = sv.Detections(
                 xyxy=boxes,
                 class_id=class_ids,
                 confidence=confidences
             )
+            tracked_ok = False
             if self.tracker and len(detections) > 0:
-                detections = self.tracker.update_with_detections(detections)
-                active_tracks = self.update_track_history(detections)
-                self.last_detections = []
-                self._store_region_labels = []
+                pre_track_count = len(detections)
+                tracked = self.tracker.update_with_detections(detections)
+                if len(tracked) > 0:
+                    detections = tracked
+                    tracked_ok = True
+                    self._tracker_empty_streak = 0
+                else:
+                    # ByteTrack can drop a whole frame (or wedge after long uptime).
+                    # Keep YOLO boxes for overlays/events instead of wiping the wall blank.
+                    self._tracker_empty_streak = int(getattr(self, '_tracker_empty_streak', 0)) + 1
+                    if self._tracker_empty_streak == 1 or self._tracker_empty_streak % 30 == 0:
+                        logger.info(
+                            f"Camera {self.cam_id}: tracker returned 0 tracks for "
+                            f"{pre_track_count} detections (streak={self._tracker_empty_streak}); "
+                            f"showing untracked boxes"
+                        )
+                    if self._tracker_empty_streak >= 30:
+                        logger.warning(
+                            f"Camera {self.cam_id}: resetting wedged tracker after "
+                            f"{self._tracker_empty_streak} empty updates with detections present"
+                        )
+                        try:
+                            self.reset_tracker()
+                        except Exception:
+                            self.tracker = self._create_byte_tracker()
+                        self._tracker_empty_streak = 0
 
+            self._clear_live_detections()
+            if tracked_ok:
+                active_tracks = self.update_track_history(detections)
                 for i, (bbox, class_id, conf, track_id) in enumerate(zip(
                     detections.xyxy, detections.class_id, detections.confidence,
                     detections.tracker_id if detections.tracker_id is not None else [None] * len(detections)
@@ -665,7 +750,7 @@ class DetectionTracker:
                     label_str = ','.join(labels) if labels else None
                     self._store_region_labels.append(label_str)
                     self.last_detections.append({
-                        'bbox': bbox,
+                        'bbox': [float(v) for v in bbox],
                         'class_name': class_name,
                         'confidence': float(conf),
                         'track_id': int(track_id) if track_id is not None else None,
@@ -675,22 +760,36 @@ class DetectionTracker:
                     logger.info(f"Camera {self.cam_id}: {len(active_tracks)} active tracks, {len(self.track_history)} total tracks in history")
                 frame = self.draw_tracking_paths(frame)
             else:
-                self._store_region_labels = []
                 for bbox, class_id, conf in zip(detections.xyxy, detections.class_id, detections.confidence):
                     class_name = self.get_class_name(int(class_id))
                     labels = self.process_region_metadata(
                         bbox, class_name, frame.shape, confidence=float(conf),
                     )
                     self._store_region_labels.append(','.join(labels) if labels else None)
+                    self.last_detections.append({
+                        'bbox': [float(v) for v in bbox],
+                        'class_name': class_name,
+                        'confidence': float(conf),
+                        'track_id': None,
+                        'region_labels': labels,
+                    })
             try:
                 from .config import NIGHT_ENHANCEMENT
             except Exception:
                 NIGHT_ENHANCEMENT = True
-            display_frame = processed_frame if (self.is_dark_mode and NIGHT_ENHANCEMENT) else frame
-            annotated_frame = self.draw_detections(display_frame, detections)
+            # Prefer raw-frame coordinates so wall/detail overlays stay aligned.
+            # Night enhancement is for inference; annotated snapshots may optionally
+            # use the enhanced background for readability.
+            if self.is_dark_mode and NIGHT_ENHANCEMENT:
+                display = processed_frame.copy()
+                display = self.draw_tracking_paths(display)
+                annotated_frame = self.draw_detections(display, detections)
+            else:
+                annotated_frame = self.draw_detections(frame, detections)
             return annotated_frame, detections
         except Exception as e:
             logger.info(f"Detection error for camera {self.cam_id}: {e}")
+            self._clear_live_detections()
             return frame, []
 
     def draw_detections(self, frame: np.ndarray, detections) -> np.ndarray:

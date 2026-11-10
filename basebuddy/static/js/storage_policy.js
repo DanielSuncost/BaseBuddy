@@ -6,6 +6,7 @@
     { key: 'recordings', label: 'Video recordings', icon: 'movie', hint: 'MP4 segments per camera' },
     { key: 'detections', label: 'Detection gallery', icon: 'photo_library', hint: 'AI snapshot per detection' },
     { key: 'stills', label: 'Timelapse captures', icon: 'camera', hint: 'Source stills', timelapseLink: true },
+    { key: 'plants', label: 'Plant images', icon: 'yard', hint: 'Growth stills and plant captures' },
     { key: 'timelapse', label: 'Timelapse videos', icon: 'slow_motion_video', hint: 'Exported timelapse MP4s' },
   ];
 

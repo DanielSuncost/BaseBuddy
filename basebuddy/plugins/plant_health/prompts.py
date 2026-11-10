@@ -21,6 +21,29 @@ PREMIUM_PROMPT_NOTE = (
     "for higher accuracy on watering, pests, and nutrient issues."
 )
 
+def build_multi_angle_prompt(brief: dict) -> str:
+    """Qualitative pass over one plant seen from several cameras plus its numbers."""
+    import json
+    packet = json.dumps(brief or {}, default=str)
+    return (
+        "You are a horticulture assistant. The user monitors ONE plant with one or more "
+        "fixed cameras. Photos are labeled by camera. A quantitative brief follows the photos.\n\n"
+        "Return ONLY valid JSON (no markdown) with these keys:\n"
+        "- health_score: integer 0-100 for the plant as a whole\n"
+        "- agreement: one of \"aligned\", \"split\", \"single\"\n"
+        "- alert: boolean, true only when the plant itself needs attention, not when one noisy angle disagrees\n"
+        "- angle_notes: array of {\"camera\": string, \"observation\": string}\n"
+        "- leaf_condition: one of \"healthy\", \"yellowing\", \"browning\", \"wilting\", \"mixed\", \"unclear\"\n"
+        "- visible_issues: array of short strings\n"
+        "- water_stress: boolean\n"
+        "- recommendations: array of 1-3 care actions for the next 24-48 hours\n"
+        "- summary: one sentence that a person can act on\n\n"
+        "Use the brief's rates and the images together. Do not invent measurements.\n\n"
+        "Quantitative brief:\n"
+        + packet
+    )
+
+
 def build_oss_prompt(species_hint: str = "") -> str:
     if species_hint and species_hint.strip().lower() not in ("", "unknown", "other"):
         return (

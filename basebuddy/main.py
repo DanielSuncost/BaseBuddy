@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-BaseBuddy - AI-Powered Security Camera System
-Clean modular entry point
-
-Architecture:
-- pages/         - UI pages (HTML routes + page-specific APIs)
-- core/api/      - Core API endpoints (metrics, storage, etc.)
-- core/services/ - Background services (backup, health monitor)
-- modules/       - Shared business logic (camera, detection, database)
-- plugins/       - Optional features (traffic counting, etc.)
-"""
+"""Process entry: logging, model check, services, camera init, Flask."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -104,9 +94,8 @@ if ADAPTIVE_MODE:
     required_models.extend([DAY_MODEL, NIGHT_MODEL])
 
 if not ensure_models_available(required_models):
-    logger.warning("Warning: Some models failed to download. Detection may not work.")
-    logger.info("   You can download models manually from:")
-    logger.info("   https://github.com/ultralytics/assets/releases")
+    logger.warning("model download failed; detection may be unavailable")
+    logger.info("weights: https://github.com/ultralytics/assets/releases")
 logger.info("=" * 60)
 
 # Create Flask app using factory pattern
@@ -254,31 +243,12 @@ try:
 except Exception as e:
     logger.warning(f"Home scenes scheduler not started: {e}")
 
-# Print startup info
-logger.info("=" * 60)
-logger.info("BaseBuddy application initialized successfully")
-logger.info("")
-logger.info("Modular Pages (pages/):")
-logger.info("  - / (Camera Wall)")
-logger.info("  - /camera/<id> (Camera Detail)")
-logger.info("  - /recordings")
-logger.info("  - /timelapse")
-logger.info("  - /gallery")
-logger.info("  - /events (review timeline)")
-logger.info("  - /integrations (MQTT, alerts, performance)")
-logger.info("  - /config (+ /setup, /thresholds, /tracking, /disabled-classes)")
-logger.info("  - /storage (disk policy & backup/archive)")
-logger.info("  - /scenes (pantry / fridge monitoring)")
-logger.info("  - /plants (plant health vision monitoring)")
-logger.info("  - /metrics (system analytics)")
-logger.info("")
-logger.info("Core APIs (core/api/):")
-logger.info("  - /api/metrics/*")
-logger.info("  - /api/storage/*")
-logger.info("  - /api/backup/*")
-logger.info("  - /api/wall/*")
-logger.info("  - /api/gallery/*")
-logger.info("=" * 60)
+logger.info("initialized")
+logger.info(
+    "pages: /  /camera/<id>  /recordings  /timelapse  /gallery  /events  "
+    "/integrations  /config  /storage  /scenes  /plants  /metrics"
+)
+logger.info("api: /api/metrics  /api/storage  /api/backup  /api/wall  /api/gallery")
 
 
 from basebuddy.core.shutdown import register_shutdown_handlers, shutdown_basebuddy
@@ -287,7 +257,7 @@ register_shutdown_handlers()
 
 
 if __name__ == "__main__":
-    logger.info(f"\n Starting BaseBuddy on http://{HOST}:{PORT}\n")
+    logger.info("listening on http://%s:%s", HOST, PORT)
 
     try:
         if socketio:

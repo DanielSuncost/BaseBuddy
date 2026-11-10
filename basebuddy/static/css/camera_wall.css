@@ -121,6 +121,36 @@
   background: var(--color-primary, #1a73e8);
 }
 
+.camera-tile .tile-audio-btn {
+  position: absolute;
+  top: 8px;
+  right: 80px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 20;
+}
+.camera-tile .tile-audio-btn .material-icons-outlined {
+  font-size: 18px;
+}
+.camera-tile:hover .tile-audio-btn,
+.camera-tile .tile-audio-btn.is-on {
+  opacity: 1;
+}
+.camera-tile .tile-audio-btn:hover,
+.camera-tile .tile-audio-btn.is-on {
+  background: var(--color-primary, #1a73e8);
+}
+
 /* Recording: hover to record, pause while active */
 .camera-tile .tile-rec-overlay {
   position: absolute;
@@ -689,4 +719,166 @@ body.modal-open {
 .wall-action-btn.active {
   background: var(--color-primary, #6366f1);
   color: #fff;
+}
+
+/* Fullscreen wall: cameras fill the screen. Controls stay behind a menu button. */
+.wall-fs-menu {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 910;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}
+.wall-fs-menu .material-icons-outlined {
+  font-size: 22px;
+}
+.wall-fs-menu:hover,
+body.wall-fs.wall-fs-chrome .wall-fs-menu {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+body.wall-fs {
+  padding-top: 0;
+  overflow: hidden;
+}
+body.wall-fs .navbar,
+body.wall-fs .setup-banner,
+body.wall-fs .config-tabs {
+  display: none !important;
+}
+body.wall-fs main.container-fluid {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+body.wall-fs .wall-fs-menu {
+  display: flex;
+}
+body.wall-fs .wall-container {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.wall-fs .wall-header {
+  display: none;
+}
+body.wall-fs.wall-fs-chrome .wall-header {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 10px 12px 10px 56px;
+  background: rgba(8, 10, 16, 0.88);
+  backdrop-filter: blur(8px);
+}
+body.wall-fs .grid {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  align-content: stretch;
+  grid-auto-rows: 1fr;
+}
+body.wall-fs .camera-tile {
+  aspect-ratio: auto;
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+}
+body.wall-fs .camera-tile:hover {
+  transform: none;
+}
+body.wall-fs .empty-slot {
+  display: none;
+}
+body.wall-fs .birdseye-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+}
+body.wall-fs #birdseye-canvas {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Canvas: each camera is placed and sized by the saved arrangement. */
+body:not(.wall-fs) .wall-container:has(.grid.wall-canvas) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-height));
+  overflow: hidden;
+}
+.grid.wall-canvas {
+  position: relative;
+  display: block;
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+.grid.wall-canvas .empty-slot {
+  display: none;
+}
+.grid.wall-canvas .camera-tile,
+body.wall-fs .grid.wall-canvas .camera-tile {
+  position: absolute;
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  cursor: grab;
+}
+.grid.wall-canvas .camera-tile:hover,
+body.wall-fs .grid.wall-canvas .camera-tile:hover {
+  transform: none;
+}
+.grid.wall-canvas .camera-tile.is-arranging {
+  cursor: grabbing;
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: -2px;
+}
+.grid.wall-canvas .tile-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: nwse-resize;
+  z-index: 30;
+}
+.grid.wall-canvas .tile-resize::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.9);
+}
+body.wall-fs .grid.wall-canvas {
+  height: 100%;
+  min-height: 0;
 }

@@ -5,6 +5,11 @@ Frames are stored JPEG-compressed (~20x smaller than raw BGR) so that the
 pre-roll ring and any in-flight sessions stay small. Sessions are hard-capped
 in length, count, and age so a track that never ends (or a stalled detection
 pipeline that never calls finalize) cannot grow memory without bound.
+
+The buffer lock is never held across JPEG encode, post-roll waits, or ffmpeg.
+Callers on the detection and capture threads use a short acquire timeout and
+shed the frame or session when the lock is busy, so a flooded clip buffer
+cannot stall detection.
 """
 from __future__ import annotations
 
@@ -28,6 +33,8 @@ MAX_CLIP_SECONDS = 60.0
 MAX_ACTIVE_SESSIONS = 4
 MAX_SESSION_AGE_S = 120.0
 JPEG_QUALITY = 80
+# Detection and capture must not wait on clip bookkeeping.
+CLIP_LOCK_TIMEOUT_S = 0.05
 
 
 class _Session:
@@ -56,7 +63,9 @@ class EventClipBuffer:
             return
         entry = (ts, jpg.tobytes())
         now = time.time()
-        with self._lock:
+        if not self._lock.acquire(timeout=CLIP_LOCK_TIMEOUT_S):
+            return
+        try:
             self._ring.append(entry)
             expired = [
                 sid for sid, sess in self._active.items()
@@ -67,9 +76,22 @@ class EventClipBuffer:
                 logger.warning("Cam %s: dropped expired event clip session %s", self.camera_id, sid)
             for sess in self._active.values():
                 sess.frames.append(entry)
+        finally:
+            self._lock.release()
 
-    def start_session(self, session_id: str) -> None:
-        with self._lock:
+    def start_session(self, session_id: str) -> bool:
+        """Begin a clip session. Returns False when the event was shed.
+
+        A full buffer drops the oldest session. If the lock is already held,
+        the new session is shed immediately so the detection loop is not blocked.
+        """
+        if not self._lock.acquire(timeout=CLIP_LOCK_TIMEOUT_S):
+            logger.warning(
+                "Cam %s: shed event clip session %s (buffer busy)",
+                self.camera_id, session_id,
+            )
+            return False
+        try:
             if len(self._active) >= MAX_ACTIVE_SESSIONS:
                 oldest = min(self._active, key=lambda sid: self._active[sid].started_at)
                 self._active.pop(oldest)
@@ -78,14 +100,22 @@ class EventClipBuffer:
                     self.camera_id, oldest,
                 )
             self._active[session_id] = _Session(deque(self._ring, maxlen=self._session_maxlen))
+            return True
+        finally:
+            self._lock.release()
 
     def drop_all_sessions(self) -> int:
         """Discard all in-flight sessions and pre-roll frames. Returns count dropped."""
-        with self._lock:
+        if not self._lock.acquire(timeout=1.0):
+            logger.warning("Cam %s: could not drop event clip sessions (buffer busy)", self.camera_id)
+            return 0
+        try:
             count = len(self._active)
             self._active.clear()
             self._ring.clear()
-        return count
+            return count
+        finally:
+            self._lock.release()
 
     def finalize_session(self, session_id: str, post_seconds: float = 5.0) -> Optional[str]:
         """Wait briefly for post-roll then write MP4. Returns relative path."""
@@ -93,8 +123,16 @@ class EventClipBuffer:
         while time.time() < deadline:
             time.sleep(0.15)
 
-        with self._lock:
+        if not self._lock.acquire(timeout=1.0):
+            logger.warning(
+                "Cam %s: shed event clip finalize %s (buffer busy)",
+                self.camera_id, session_id,
+            )
+            return None
+        try:
             session = self._active.pop(session_id, None)
+        finally:
+            self._lock.release()
         if session is None or len(session.frames) < 2:
             return None
         return self._write_clip(list(session.frames), session_id)

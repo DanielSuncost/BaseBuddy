@@ -1,7 +1,6 @@
-"""
-Camera Profile Management - Per-camera configuration profiles
-"""
+"""Per-camera configuration profiles."""
 import sqlite3
+from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
 import json
@@ -146,11 +145,18 @@ class CameraProfileManager:
         self.db_path = db_path
         self._schema_checked = False
     
+    @contextmanager
     def _connect(self):
-        """Open database connection"""
+        """Open database connection; always closed on context exit."""
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
     
     def _ensure_schema(self, cursor):
         """Ensure database has all required columns"""

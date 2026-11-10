@@ -73,9 +73,12 @@ virtualenv/
 analytics.db
 detections.db
 camera_profiles.json
+camera_groups.json
 timelapse_schedules.json
 camera_wall_state.json
+baselines.json
 config.txt
+config.txt.bak*
 
 # Legacy monolith (keep archive/README.md only)
 /archive/main_legacy.py
@@ -96,6 +99,8 @@ secrets.py
 # Runtime state
 .archive_state.json
 .retention_state.json
+.storage_rate_history.json
+.storage_ingest_cache.json
 .pid
 libdevice.10.bc
 sam_prompt_configs/
@@ -130,6 +135,7 @@ Thumbs.db
 #=============================================================================
 *.tmp
 *.bak
+*.bak-*
 *.backup
 /tmp/
 backup_*/
@@ -153,6 +159,7 @@ site/
 # MAINTAINER DOCS (local only — not published)
 #=============================================================================
 docs/PUBLISH.md
+docs/PREMIUM-SPLIT.md
 docs/RELEASE-1.0.md
 docs/ROADMAP.md
 docs/MIGRATION-0.1.md

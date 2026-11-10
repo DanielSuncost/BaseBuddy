@@ -10,7 +10,11 @@ import numpy as np
 from basebuddy.plugins.plant_health.metrics import extract_metrics
 
 
-def capture_frame(camera_id: int, max_width: int = 1280) -> Tuple[Optional[np.ndarray], Optional[bytes], Optional[str]]:
+def capture_frame(
+    camera_id: int,
+    max_width: int = 1280,
+    crop: Optional[dict] = None,
+) -> Tuple[Optional[np.ndarray], Optional[bytes], Optional[str]]:
     import basebuddy.modules.state as shared_state
     from datetime import datetime
     import os
@@ -23,6 +27,10 @@ def capture_frame(camera_id: int, max_width: int = 1280) -> Tuple[Optional[np.nd
     frame, _ts = grabber.get_latest_frame()
     if frame is None:
         return None, None, None
+    if crop:
+        from basebuddy.plugins.plant_health.frame_crop import apply_frame_crop
+
+        frame = apply_frame_crop(frame, crop)
     if max_width and frame.shape[1] > max_width:
         scale = max_width / float(frame.shape[1])
         frame = cv2.resize(
@@ -57,7 +65,9 @@ def run_monitor_cycle(monitor_id: str, trigger: str = "manual") -> Dict[str, Any
         return {"ok": False, "error": "Monitor not found"}
 
     camera_id = int(monitor.get("camera_id", 0))
-    frame, image_bytes, image_path = capture_frame(camera_id)
+    frame, image_bytes, image_path = capture_frame(
+        camera_id, crop=monitor.get("frame_crop")
+    )
     if frame is None or not image_bytes:
         return {"ok": False, "error": "No frame from camera — is it running on Camera Wall?"}
 
@@ -96,6 +106,14 @@ def run_monitor_cycle(monitor_id: str, trigger: str = "manual") -> Dict[str, Any
         run_actions(monitor, "on_water_recommendation", {"trigger": trigger, "recommendations": recs})
 
     ok = bool(color_metrics) or bool(vision_result and vision_result.get("ok"))
+    # Soft-fail SAM growth tracking (does not affect color timeline / vision).
+    growth = None
+    try:
+        from basebuddy.plugins.plant_health.sam_growth import maybe_run_growth_sample
+        growth = maybe_run_growth_sample(monitor_id, trigger=trigger)
+    except Exception:
+        growth = None
+
     return {
         "ok": ok,
         "color_sample_id": color_id,
@@ -105,6 +123,7 @@ def run_monitor_cycle(monitor_id: str, trigger: str = "manual") -> Dict[str, Any
         "actions": action_results,
         "analyzer": getattr(analyzer, "name", "oss"),
         "premium_available": _premium_available(),
+        "sam_growth": growth,
     }
 
 

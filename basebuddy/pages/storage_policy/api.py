@@ -263,6 +263,45 @@ def api_get_settings():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+def _capacity_gib(path: str) -> float:
+    """Total capacity (GiB) of the drive holding *path*; 0 when unknown."""
+    try:
+        import shutil as _sh
+
+        if path and os.path.exists(path):
+            return _sh.disk_usage(path).total / (1024 ** 3)
+    except OSError:
+        pass
+    return 0.0
+
+
+def _cap_sizes_to_capacity(data: dict, out: dict) -> None:
+    """No size setting may exceed (or reserve) more than its drive can hold.
+
+    - BACKUP_MIN_FREE_GB  <= 50% of the backup drive
+    - DISK_FREE_MIN_GB    <= 50% of the local (project) drive
+    - STORAGE_QUOTA_GB    <= 90% of the local (project) drive
+    """
+    from basebuddy.modules import config as cfg
+
+    backup_drive = str(data.get("BACKUP_DRIVE_PATH") or getattr(cfg, "BACKUP_DRIVE_PATH", "") or "")
+    local_cap = _capacity_gib(project_root_from_here())
+    backup_cap = _capacity_gib(backup_drive)
+
+    def _cap(key, cap):
+        if key in out and cap > 0:
+            try:
+                v = float(out[key])
+            except ValueError:
+                return
+            if v > cap:
+                out[key] = str(round(cap, 2))
+
+    _cap("BACKUP_MIN_FREE_GB", backup_cap * 0.5)
+    _cap("DISK_FREE_MIN_GB", local_cap * 0.5)
+    _cap("STORAGE_QUOTA_GB", local_cap * 0.9)
+
+
 def _coerce_settings_body(data: dict) -> dict:
     """Validate and stringify values for config.txt."""
     out = {}
@@ -312,6 +351,18 @@ def _coerce_settings_body(data: dict) -> dict:
             out["DISK_FREE_MIN_GB"] = "20"
         else:
             out["DISK_FREE_MIN_GB"] = str(max(0.0, float(d)))
+    # --- adaptive budget settings (percent-based; sizes capped at drive capacity) ---
+    if "BACKUP_MAX_PERCENT" in data and data["BACKUP_MAX_PERCENT"] not in (None, ""):
+        out["BACKUP_MAX_PERCENT"] = str(min(95.0, max(1.0, float(data["BACKUP_MAX_PERCENT"]))))
+    if "BACKUP_MIN_FREE_PERCENT" in data and data["BACKUP_MIN_FREE_PERCENT"] not in (None, ""):
+        out["BACKUP_MIN_FREE_PERCENT"] = str(min(50.0, max(0.0, float(data["BACKUP_MIN_FREE_PERCENT"]))))
+    if "DISK_FREE_MIN_PERCENT" in data and data["DISK_FREE_MIN_PERCENT"] not in (None, ""):
+        out["DISK_FREE_MIN_PERCENT"] = str(min(50.0, max(0.0, float(data["DISK_FREE_MIN_PERCENT"]))))
+    if "BACKUP_PRUNE_DRY_RUN" in data:
+        out["BACKUP_PRUNE_DRY_RUN"] = "true" if data["BACKUP_PRUNE_DRY_RUN"] else "false"
+    if "BACKUP_MIN_FREE_GB" in data and data["BACKUP_MIN_FREE_GB"] not in (None, ""):
+        out["BACKUP_MIN_FREE_GB"] = str(max(0.0, float(data["BACKUP_MIN_FREE_GB"])))
+    _cap_sizes_to_capacity(data, out)
     if "REMOTE_STORAGE_ENABLED" in data:
         out["REMOTE_STORAGE_ENABLED"] = "true" if data["REMOTE_STORAGE_ENABLED"] else "false"
     if "REMOTE_STORAGE_PROVIDER" in data:

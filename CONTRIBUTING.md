@@ -1,6 +1,10 @@
-# Contributing to BaseBuddy
+# Contributing
 
-Thanks for your interest in contributing.
+## History
+
+`CHANGELOG.md` is the release record. Add user-visible changes under `[Unreleased]`.
+
+Commit subject: imperative, one line, the code change. Body: cause, constraint, or migration, when the subject is not enough.
 
 ## Repository layout
 

@@ -24,6 +24,9 @@ _ALL_MEDIA_EXTS = _IMAGE_EXTS | _VIDEO_EXTS
 # Prefer reclaiming detection crops first (largest / most ephemeral), then stills.
 _DISK_PRESSURE_CATEGORIES = ("detections", "stills", "video_thumbs", "recording_thumbs")
 
+# Subtrees that follow the plants window, not the stills or detections window.
+_PLANT_DIR_NAMES = frozenset({"sam_growth", "plant_health"})
+
 
 class RetentionService:
     def __init__(
@@ -106,11 +109,16 @@ class RetentionService:
         uploads = self._state.setdefault("uploads", {})
         return uploads
 
-    def _iter_category_files(self, category: str, src_dir: str, max_age_seconds: int):
+    @staticmethod
+    def _hide_plant_dirs(dirs: List[str]) -> None:
+        dirs[:] = [d for d in dirs if d not in _PLANT_DIR_NAMES]
+
+    def _iter_media_files(self, src_dir: str, cutoff: float, *, skip_plants: bool):
         if not os.path.isdir(src_dir):
             return
-        cutoff = time.time() - max_age_seconds
-        for root, _dirs, files in os.walk(src_dir):
+        for root, dirs, files in os.walk(src_dir):
+            if skip_plants:
+                self._hide_plant_dirs(dirs)
             for fname in files:
                 ext = os.path.splitext(fname)[1].lower()
                 if ext not in _ALL_MEDIA_EXTS:
@@ -122,8 +130,33 @@ class RetentionService:
                         continue
                 except OSError:
                     continue
-                rel = os.path.relpath(full, src_dir)
-                yield full, rel, mtime
+                yield full, mtime
+
+    def _iter_plant_files(self, src_dir: str, cutoff: float):
+        """Yield aged files under sam_growth/ and plant_health/ only."""
+        if not os.path.isdir(src_dir):
+            return
+        plant_roots: List[str] = []
+        for root, dirs, _files in os.walk(src_dir):
+            plant_roots.extend(
+                os.path.join(root, d) for d in dirs if d in _PLANT_DIR_NAMES
+            )
+            self._hide_plant_dirs(dirs)
+        for plant_root in plant_roots:
+            for full, mtime in self._iter_media_files(plant_root, cutoff, skip_plants=False):
+                yield full, mtime
+
+    def _iter_category_files(self, category: str, src_dir: str, max_age_seconds: int):
+        if not os.path.isdir(src_dir):
+            return
+        cutoff = time.time() - max_age_seconds
+        if category == "plants":
+            pairs = self._iter_plant_files(src_dir, cutoff)
+        else:
+            pairs = self._iter_media_files(src_dir, cutoff, skip_plants=True)
+        for full, mtime in pairs:
+            rel = os.path.relpath(full, src_dir)
+            yield full, rel, mtime
 
     def _should_upload(self, category: str) -> bool:
         cfg = self.retention_policy.get(category) or {}
@@ -310,7 +343,8 @@ class RetentionService:
             src_dir = self.source_dirs.get(category)
             if not src_dir or not os.path.isdir(src_dir):
                 continue
-            for root, _dirs, files in os.walk(src_dir):
+            for root, dirs, files in os.walk(src_dir):
+                self._hide_plant_dirs(dirs)
                 for fname in files:
                     ext = os.path.splitext(fname)[1].lower()
                     if ext not in _ALL_MEDIA_EXTS:
@@ -327,64 +361,124 @@ class RetentionService:
         candidates.sort(key=lambda x: x[0])
         return candidates
 
+    def _disk_free_min_percent(self) -> float:
+        try:
+            from basebuddy.modules import config as cfg
+
+            return max(0.0, min(50.0, float(getattr(cfg, "DISK_FREE_MIN_PERCENT", 5.0))))
+        except Exception:
+            return 5.0
+
+    def _floor_bytes(self, total_bytes: int) -> int:
+        return int(max(self.disk_free_min_gb * (1024**3),
+                       total_bytes * self._disk_free_min_percent() / 100.0))
+
     def _evict_for_disk_pressure(self) -> Dict[str, Any]:
         """
-        When free disk is below disk_free_min_gb, delete oldest detection/still
-        files regardless of age until free space recovers past the target.
+        For each physical drive holding detections/stills, when free space is below
+        max(disk_free_min_gb, DISK_FREE_MIN_PERCENT of that drive), delete the oldest
+        files *on that drive* until free space is 10 GiB above the floor.
         """
-        if self.disk_free_min_gb <= 0:
+        if self.disk_free_min_gb <= 0 and self._disk_free_min_percent() <= 0:
             return {"skipped": True, "reason": "disabled"}
 
-        probe = next(
-            (self.source_dirs[c] for c in _DISK_PRESSURE_CATEGORIES if self.source_dirs.get(c)),
-            self._state_file,
-        )
-        free_gb = self._free_gb_for_path(probe)
-        if free_gb >= self.disk_free_min_gb:
-            return {"skipped": True, "reason": "ok", "free_gb": round(free_gb, 2)}
-
-        target_gb = self.disk_free_min_gb + 10.0
-        need_bytes = int(max(0.0, target_gb - free_gb) * (1024**3))
-        if need_bytes <= 0:
-            return {"skipped": True, "reason": "ok", "free_gb": round(free_gb, 2)}
-
-        logger.warning(
-            "Disk pressure: %.1f GiB free (min %.0f) — deleting oldest detections/stills",
-            free_gb,
-            self.disk_free_min_gb,
-        )
-
-        candidates = self._collect_oldest_media(_DISK_PRESSURE_CATEGORIES)
-        deleted = 0
-        freed = 0
-        by_cat: Dict[str, int] = {}
-        for _mtime, path, size, category in candidates:
-            if freed >= need_bytes:
-                break
+        by_dev: Dict[int, List[str]] = {}
+        for c in _DISK_PRESSURE_CATEGORIES:
+            d = self.source_dirs.get(c)
+            if not d or not os.path.isdir(d):
+                continue
             try:
-                os.remove(path)
-                deleted += 1
-                freed += size
-                by_cat[category] = by_cat.get(category, 0) + 1
-            except OSError as exc:
-                logger.error("Disk-pressure delete failed %s: %s", path, exc)
+                by_dev.setdefault(os.stat(d).st_dev, []).append(c)
+            except OSError:
+                continue
+        if not by_dev:
+            return {"skipped": True, "reason": "no_dirs"}
 
-        free_after = self._free_gb_for_path(probe)
-        logger.warning(
-            "Disk pressure freed %.1f GiB (%d files, %s). Free now %.1f GiB",
-            freed / (1024**3),
-            deleted,
-            by_cat,
-            free_after,
-        )
-        return {
-            "deleted": deleted,
-            "freed_mb": round(freed / (1024 * 1024), 2),
-            "by_category": by_cat,
-            "free_gb_before": round(free_gb, 2),
-            "free_gb_after": round(free_after, 2),
-            "target_gb": target_gb,
-        }
+        result: Dict[str, Any] = {"devices": []}
+        total_deleted, total_freed = 0, 0
+        by_cat_all: Dict[str, int] = {}
+        for dev, cats in by_dev.items():
+            probe = self.source_dirs[cats[0]]
+            try:
+                usage = shutil.disk_usage(probe)
+            except OSError:
+                continue
+            floor = self._floor_bytes(usage.total)
+            entry = {"probe": probe, "categories": cats,
+                     "free_gb": round(usage.free / (1024**3), 2),
+                     "floor_gb": round(floor / (1024**3), 2)}
+            if usage.free >= floor:
+                entry["skipped"] = "ok"
+                result["devices"].append(entry)
+                continue
+            need_bytes = floor + 10 * (1024**3) - usage.free
+            logger.warning(
+                "Disk pressure on %s: %.1f GiB free (floor %.1f GiB) — deleting oldest %s",
+                probe, usage.free / (1024**3), floor / (1024**3), "/".join(cats),
+            )
+            deleted = freed = 0
+            for _mtime, path, size, category in self._collect_oldest_media(tuple(cats)):
+                if freed >= need_bytes:
+                    break
+                try:
+                    os.remove(path)
+                    deleted += 1
+                    freed += size
+                    by_cat_all[category] = by_cat_all.get(category, 0) + 1
+                except OSError as exc:
+                    logger.error("Disk-pressure delete failed %s: %s", path, exc)
+            after = self._free_gb_for_path(probe)
+            entry.update(deleted=deleted, freed_mb=round(freed / (1024 * 1024), 2), free_gb_after=round(after, 2))
+            logger.warning("Disk pressure freed %.1f GiB (%d files) on %s. Free now %.1f GiB",
+                           freed / (1024**3), deleted, probe, after)
+            result["devices"].append(entry)
+            total_deleted += deleted
+            total_freed += freed
+
+        if not total_deleted:
+            result.update(skipped=True, reason="ok")
+            if result["devices"]:
+                result["free_gb"] = min(d["free_gb"] for d in result["devices"])
+            return result
+        result.update(deleted=total_deleted, freed_mb=round(total_freed / (1024 * 1024), 2),
+                      by_category=by_cat_all)
+        return result
+
+    def _analytics_db_check(self) -> Dict[str, Any]:
+        """Track analytics.db size; warn when it is large or would fill its disk soon."""
+        try:
+            from basebuddy.core.paths import get_repo_root
+            from basebuddy.modules import config as cfg
+
+            path = getattr(cfg, "ANALYTICS_DB_PATH", None) or os.path.join(get_repo_root(), "analytics.db")
+            warn_gb = float(getattr(cfg, "ANALYTICS_DB_WARN_GB", 10.0))
+            if not os.path.isfile(path):
+                return {"skipped": True}
+            size = os.path.getsize(path)
+            usage = shutil.disk_usage(os.path.dirname(os.path.abspath(path)))
+        except Exception as exc:
+            return {"error": str(exc)}
+        now = time.time()
+        hist = self._state.setdefault("analytics_db_history", [])
+        if not hist or now - hist[-1][0] >= 6 * 3600:
+            hist.append([now, size])
+            del hist[:-60]
+        growth_per_day = 0.0
+        if len(hist) >= 2 and hist[-1][0] > hist[0][0]:
+            growth_per_day = max(0.0, (hist[-1][1] - hist[0][1]) / ((hist[-1][0] - hist[0][0]) / 86400))
+        days_left = (usage.free / growth_per_day) if growth_per_day > 0 else None
+        warnings = []
+        if size > warn_gb * (1024**3):
+            warnings.append(f"analytics.db is {size / (1024**3):.1f} GiB (> {warn_gb:.0f} GiB)")
+        if days_left is not None and days_left < 60:
+            warnings.append(f"analytics.db growth {growth_per_day / (1024**3):.2f} GiB/day would fill its disk in {days_left:.0f} days")
+        info = {"size_gb": round(size / (1024**3), 2),
+                "growth_gb_per_day": round(growth_per_day / (1024**3), 3),
+                "disk_free_gb": round(usage.free / (1024**3), 2),
+                "warnings": warnings}
+        if warnings:
+            logger.warning("Storage warning: %s", "; ".join(warnings))
+        return info
 
     def perform_retention_pass(self) -> dict:
         if not self.enabled:
@@ -398,7 +492,17 @@ class RetentionService:
         # Rolling cloud buffer first — makes room before new uploads
         remote_purged = self._purge_cloud_buffer()
 
-        for category, src_dir in self.source_dirs.items():
+        scans: List[Tuple[str, str]] = list(self.source_dirs.items())
+        plant_days = int((self.retention_policy.get("plants") or {}).get("local_days") or 0)
+        if plant_days > 0:
+            seen = set()
+            for key in ("stills", "detections"):
+                root = self.source_dirs.get(key)
+                if root and root not in seen:
+                    seen.add(root)
+                    scans.append(("plants", root))
+
+        for category, src_dir in scans:
             cfg = self.retention_policy.get(category) or {}
             local_days = int(cfg.get("local_days") or 0)
             if local_days <= 0:
@@ -420,6 +524,7 @@ class RetentionService:
                     logger.error("Retention delete failed %s: %s", local_path, exc)
 
         pressure = self._evict_for_disk_pressure()
+        self._state["analytics_db"] = self._analytics_db_check()
         pressure_deleted = int(pressure.get("deleted") or 0)
         if pressure_deleted:
             deleted += pressure_deleted
@@ -491,6 +596,8 @@ class RetentionService:
             ),
             "disk_free_min_gb": self.disk_free_min_gb,
             "last_disk_pressure": self._state.get("last_disk_pressure"),
+            "disk_free_min_percent": self._disk_free_min_percent(),
+            "analytics_db": self._state.get("analytics_db"),
             "totals": self._state.get("totals", {}),
             "retention_policy": self.retention_policy,
         }

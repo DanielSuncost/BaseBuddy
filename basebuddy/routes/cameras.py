@@ -1,6 +1,4 @@
-"""
-Camera Management Routes
-"""
+"""Camera configuration routes."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,12 +38,18 @@ def save_wall_state(state):
         return False
 
 def get_config_file_path():
-    """Get the path to the config file"""
-    # Try config.txt first, then .env
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.txt')
-    if not os.path.exists(config_path):
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
-    return config_path
+    """Repo-root config.txt (same file run.sh sources)."""
+    try:
+        from basebuddy.core.paths import get_repo_root
+
+        root = get_repo_root()
+    except Exception:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    config_path = os.path.join(root, "config.txt")
+    if os.path.exists(config_path):
+        return config_path
+    env_path = os.path.join(root, ".env")
+    return env_path if os.path.exists(env_path) else config_path
 
 def load_camera_config():
     """Load camera configuration from file"""
@@ -62,9 +66,11 @@ def load_camera_config():
                 if '=' in line:
                     key, value = line.split('=', 1)
                     key = key.strip()
+                    if key.startswith('export '):
+                        key = key[7:].strip()
                     value = value.strip().strip('"').strip("'")
-                    if key.startswith('CAM'):
-                        cam_num = int(key.replace('CAM', ''))
+                    if key.startswith('CAM') and key[3:].isdigit():
+                        cam_num = int(key[3:])
                         cameras.append({
                             'id': cam_num - 1,
                             'name': f'Camera {cam_num}',
@@ -73,7 +79,7 @@ def load_camera_config():
                         })
     
     # Also check environment variables
-    for i in range(1, 21):  # Support up to 20 cameras
+    for i in range(1, 33):
         env_key = f'CAM{i}'
         url = os.environ.get(env_key, '')
         if url:
@@ -86,6 +92,12 @@ def load_camera_config():
                     'url': url,
                     'enabled': True
                 })
+
+    # config.txt may list the same CAMn twice (export + plain); keep last URL.
+    by_id = {}
+    for camera in cameras:
+        by_id[camera['id']] = camera
+    cameras = list(by_id.values())
     
     # Update camera names from profiles
     try:
@@ -121,12 +133,15 @@ def save_camera_config(cameras):
         
         if '=' in stripped:
             key = stripped.split('=', 1)[0].strip()
-            if key.startswith('CAM'):
-                cam_num = int(key.replace('CAM', ''))
+            if key.startswith('export '):
+                key = key[7:].strip()
+            if key.startswith('CAM') and key[3:].isdigit():
+                cam_num = int(key[3:])
                 cam_id = cam_num - 1
                 cam = next((c for c in cameras if c['id'] == cam_id), None)
                 if cam:
-                    updated_lines.append(f'{key}="{cam["url"]}"\n')
+                    prefix = "export " if stripped.startswith("export ") else ""
+                    updated_lines.append(f'{prefix}{key}="{cam["url"]}"\n')
                     cam_keys_updated.add(cam_id)
                     continue
         
@@ -136,7 +151,7 @@ def save_camera_config(cameras):
     for cam in cameras:
         if cam['id'] not in cam_keys_updated:
             cam_num = cam['id'] + 1
-            updated_lines.append(f'CAM{cam_num}="{cam["url"]}"\n')
+            updated_lines.append(f'export CAM{cam_num}="{cam["url"]}"\n')
     
     # Write back
     with open(config_path, 'w') as f:
@@ -447,6 +462,107 @@ def api_reload_cameras():
             'message': 'Failed to reload cameras. Please restart the application.'
         }), 500
 
+@cameras_bp.route('/api/cameras/ai-budget')
+def api_cameras_ai_budget():
+    """Rough shared-GPU AI budget from summed detection FPS vs measured capacity.
+
+    Capacity ≈ 1000 / avg_inference_ms (sequential GPU inferences). Optional query
+    overrides let the profile modal preview the current slider without saving:
+      ?camera_id=&detection_fps=&detection_enabled=
+    """
+    from basebuddy.modules.config import DETECTION_FPS_MIN, DETECTION_FPS_MAX
+
+    try:
+        manager = get_profile_manager()
+        profiles = dict(manager.get_all_profiles())
+        # Include configured/running cameras that may not have a saved row yet.
+        for cam_id in list(grabbers.keys()):
+            if cam_id not in profiles:
+                profiles[cam_id] = manager.get_profile(cam_id)
+        try:
+            for i, url in enumerate(CAM_URLS or []):
+                if url and i not in profiles:
+                    profiles[i] = manager.get_profile(i)
+        except Exception:
+            pass
+
+        override_id = request.args.get('camera_id', type=int)
+        override_fps = request.args.get('detection_fps', type=float)
+        override_enabled = request.args.get('detection_enabled')
+
+        cameras = []
+        requested_fps = 0.0
+        for cam_id, profile in sorted(profiles.items()):
+            cam_enabled = bool(profile.camera_enabled)
+            det_enabled = bool(profile.detection_enabled)
+            fps = float(getattr(profile, 'detection_fps', 1.0) or 0.0)
+            if override_id is not None and cam_id == override_id:
+                if override_enabled is not None:
+                    det_enabled = str(override_enabled).lower() in ('1', 'true', 'yes')
+                if override_fps is not None:
+                    fps = max(DETECTION_FPS_MIN, min(float(override_fps), DETECTION_FPS_MAX))
+            counts = bool(cam_enabled and det_enabled and fps > 0)
+            if counts:
+                requested_fps += fps
+            cameras.append({
+                'camera_id': cam_id,
+                'camera_enabled': cam_enabled,
+                'detection_enabled': det_enabled,
+                'detection_fps': fps,
+                'counts_toward_budget': counts,
+            })
+
+        avg_infer_ms = 0.0
+        try:
+            from basebuddy.modules.profiler import get_profiler
+            summary = get_profiler().get_summary()
+            avg_infer_ms = float(summary.get('avg_detection_time_ms') or 0.0)
+        except Exception:
+            pass
+
+        # Fallback when profiler has no samples yet (~50ms is typical nano YOLO).
+        effective_infer_ms = avg_infer_ms if avg_infer_ms > 1.0 else 50.0
+        capacity_fps = 1000.0 / effective_infer_ms
+        budget_percent = (requested_fps / capacity_fps) * 100.0 if capacity_fps > 0 else 0.0
+
+        gpu_util = None
+        gpu_name = None
+        try:
+            from basebuddy.modules.resource_monitor import get_resource_monitor
+            gpu = get_resource_monitor().get_gpu_stats()
+            if gpu:
+                gpu_util = float(gpu.gpu_utilization_percent)
+                gpu_name = gpu.name
+        except Exception:
+            pass
+
+        if budget_percent < 40:
+            load = 'Light'
+        elif budget_percent < 85:
+            load = 'OK'
+        else:
+            load = 'Heavy'
+
+        return jsonify({
+            'ok': True,
+            'requested_fps': round(requested_fps, 2),
+            'capacity_fps': round(capacity_fps, 1),
+            'budget_percent': round(budget_percent, 0),
+            'load': load,
+            'avg_infer_ms': round(avg_infer_ms, 1) if avg_infer_ms > 0 else None,
+            'infer_ms_assumed': round(effective_infer_ms, 1),
+            'gpu_utilization_percent': gpu_util,
+            'gpu_name': gpu_name,
+            'detection_fps_min': DETECTION_FPS_MIN,
+            'detection_fps_max': DETECTION_FPS_MAX,
+            'cameras': cameras,
+            'note': 'GPU is shared; detection FPS is how often each camera runs AI, not stream FPS.',
+        })
+    except Exception as e:
+        logger.exception("ai-budget failed")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @cameras_bp.route('/api/cameras/<int:camera_id>/profile')
 def api_get_camera_profile(camera_id):
     """Get camera profile"""
@@ -468,6 +584,7 @@ def api_get_camera_profile(camera_id):
                 'camera_id': camera_id,
                 'camera_enabled': True,
                 'detection_enabled': True,
+                'detection_fps': 1.0,
                 'name': f'Camera {camera_id + 1}'
             }
         })
@@ -496,6 +613,29 @@ def api_apply_template(camera_id):
         profile = manager.get_profile(camera_id)
         profile = apply_template(profile, template_name)
         manager.save_profile(profile)
+        try:
+            from basebuddy.modules.system_init import apply_runtime_profile
+            apply_runtime_profile(camera_id, profile)
+            if camera_id in grabbers:
+                grabber = grabbers[camera_id]
+                if profile.camera_enabled:
+                    if not grabber.running or not (grabber.thread and grabber.thread.is_alive()):
+                        logger.info(f"Restarting camera {camera_id+1} grabber")
+                        grabber.start()
+                    elif profile.detection_enabled and not (
+                        grabber.detection_thread and grabber.detection_thread.is_alive()
+                    ):
+                        grabber.start_detection_thread()
+                else:
+                    if grabber.cap:
+                        try:
+                            grabber.cap.release()
+                        except Exception:
+                            pass
+                        grabber.cap = None
+                    grabber.clear_cached_frames()
+        except Exception as apply_err:
+            logger.info(f"Warning: Could not apply template to runtime: {apply_err}")
         
         return jsonify({
             'ok': True,
@@ -522,6 +662,13 @@ def api_save_camera_profile(camera_id):
             profile.camera_enabled = bool(data['camera_enabled'])
         if 'detection_enabled' in data:
             profile.detection_enabled = bool(data['detection_enabled'])
+        if 'detection_fps' in data:
+            from basebuddy.modules.config import DETECTION_FPS_MIN, DETECTION_FPS_MAX
+            try:
+                fps = float(data['detection_fps'])
+            except (TypeError, ValueError):
+                fps = profile.detection_fps
+            profile.detection_fps = max(DETECTION_FPS_MIN, min(fps, DETECTION_FPS_MAX))
         if 'name' in data:
             profile.name = data['name']
         if 'purpose' in data:
@@ -558,17 +705,20 @@ def api_save_camera_profile(camera_id):
         
         # Apply profile to running grabber and detector
         try:
+            from basebuddy.modules.system_init import apply_runtime_profile
+            apply_runtime_profile(camera_id, profile)
+
             if camera_id in grabbers:
                 grabber = grabbers[camera_id]
-                old_enabled = getattr(grabber, 'camera_enabled', True)
-                grabber.camera_enabled = profile.camera_enabled
-                logger.info(f"Camera {camera_id+1}: Updated camera_enabled from {old_enabled} to {profile.camera_enabled}")
-
                 if profile.camera_enabled:
                     # Ensure grabbing thread is running (it may have been stopped manually)
                     if not grabber.running or not (grabber.thread and grabber.thread.is_alive()):
                         logger.info(f"Restarting camera {camera_id+1} grabber")
                         grabber.start()
+                    elif grabber.detection_enabled and not (
+                        grabber.detection_thread and grabber.detection_thread.is_alive()
+                    ):
+                        grabber.start_detection_thread()
                 else:
                     # Pause camera feed without blocking the main thread
                     if grabber.cap:
@@ -579,14 +729,6 @@ def api_save_camera_profile(camera_id):
                         grabber.cap = None
                     grabber.clear_cached_frames()
                     logger.info(f"Camera {camera_id+1}: feed disabled and buffers cleared")
-
-            if camera_id in detectors:
-                detector = detectors[camera_id]
-                detector.detection_enabled = profile.detection_enabled and profile.camera_enabled
-                logger.info(
-                    f"Camera {camera_id+1}: Camera {'ON' if profile.camera_enabled else 'OFF'}, "
-                    f"Detection {'ON' if profile.detection_enabled else 'OFF'}"
-                )
         except Exception as apply_err:
             import traceback
             logger.info(f"Warning: Could not apply profile: {apply_err}")

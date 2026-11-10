@@ -1,4 +1,7 @@
 """Tests for the event clip ring buffer: memory caps and session lifecycle."""
+import threading
+import time
+
 import numpy as np
 
 import basebuddy.core.services.event_clip_buffer as ecb
@@ -52,8 +55,82 @@ class TestSessions:
     def test_active_session_count_is_capped(self):
         buf = EventClipBuffer(camera_id=0, pre_seconds=1.0, fps=10)
         for i in range(MAX_ACTIVE_SESSIONS + 3):
-            buf.start_session(f"s{i}")
+            assert buf.start_session(f"s{i}") is True
         assert len(buf._active) == MAX_ACTIVE_SESSIONS
+
+    def test_full_buffer_drops_oldest_session(self):
+        buf = EventClipBuffer(camera_id=0, pre_seconds=1.0, fps=10)
+        assert buf.start_session("oldest") is True
+        buf._active["oldest"].started_at -= 100
+        for i in range(MAX_ACTIVE_SESSIONS - 1):
+            buf.start_session(f"s{i}")
+        assert buf.start_session("new") is True
+        assert "oldest" not in buf._active
+        assert "new" in buf._active
+        assert len(buf._active) == MAX_ACTIVE_SESSIONS
+
+    def test_start_session_sheds_when_buffer_lock_is_busy(self):
+        buf = EventClipBuffer(camera_id=0, pre_seconds=1.0, fps=10)
+        buf.start_session("kept")
+        release = threading.Event()
+        started = threading.Event()
+
+        def hold_lock():
+            buf._lock.acquire()
+            started.set()
+            release.wait(2.0)
+            buf._lock.release()
+
+        holder = threading.Thread(target=hold_lock)
+        holder.start()
+        assert started.wait(1.0)
+        outcome = {}
+
+        def attempt():
+            t0 = time.time()
+            outcome["ok"] = buf.start_session("shed-me")
+            outcome["dt"] = time.time() - t0
+
+        worker = threading.Thread(target=attempt)
+        worker.start()
+        worker.join(1.0)
+        release.set()
+        holder.join(1.0)
+        assert not worker.is_alive(), "start_session blocked on a busy clip buffer"
+        assert outcome["ok"] is False
+        assert outcome["dt"] < 0.5
+        assert "shed-me" not in buf._active
+        assert "kept" in buf._active
+
+    def test_push_does_not_block_when_buffer_lock_is_busy(self):
+        buf = EventClipBuffer(camera_id=0, pre_seconds=1.0, fps=10)
+        release = threading.Event()
+        started = threading.Event()
+
+        def hold_lock():
+            buf._lock.acquire()
+            started.set()
+            release.wait(2.0)
+            buf._lock.release()
+
+        holder = threading.Thread(target=hold_lock)
+        holder.start()
+        assert started.wait(1.0)
+        outcome = {}
+
+        def attempt():
+            t0 = time.time()
+            buf.push(_frame())
+            outcome["dt"] = time.time() - t0
+
+        worker = threading.Thread(target=attempt)
+        worker.start()
+        worker.join(1.0)
+        release.set()
+        holder.join(1.0)
+        assert not worker.is_alive(), "push blocked on a busy clip buffer"
+        assert outcome["dt"] < 0.5
+        assert len(buf._ring) == 0
 
     def test_expired_sessions_are_dropped_on_push(self, monkeypatch):
         buf = EventClipBuffer(camera_id=0, pre_seconds=1.0, fps=10)

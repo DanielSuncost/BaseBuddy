@@ -1,5 +1,3 @@
-# AI Models
-Download YOLO models here:
-- yolov8n.pt (nano - fastest)
-- yolov8s.pt (small - balanced)
-- yolov8m.pt (medium - accurate)
+# Weights
+
+Local YOLO checkpoints. `AI_MODEL` names the file; the default is `yolov8n.pt`. A missing default is downloaded on first run. `yolov8s.pt` and `yolov8m.pt` are optional larger checkpoints.

@@ -66,6 +66,13 @@ def create_monitor(payload: dict) -> dict:
         },
         "segmentation": payload.get("segmentation") or {"mode": "auto"},
         "actions": payload.get("actions") or [],
+        "sam_growth": payload.get("sam_growth") or {
+            "enabled": True,
+            "interval_s": int(payload.get("check_interval_s") or 3600),
+            "exemplar_interval_s": 86400,
+        },
+        "subject_id": (payload.get("subject_id") or "").strip(),
+        "subject_name": (payload.get("subject_name") or "").strip(),
     }
     config.setdefault("monitors", []).append(monitor)
     save_plant_config(config)

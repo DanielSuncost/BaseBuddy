@@ -1,9 +1,4 @@
-"""Read-side detection/gallery/stats queries.
-
-Mixin for :class:`modules.database.AnalyticsDB`. Split out of the original
-monolithic database module; methods are verbatim and share the same
-connection helpers on the composed class.
-"""
+"""AnalyticsDB mixin: detection, gallery, and stats reads."""
 import os
 import sqlite3
 import logging
@@ -30,7 +25,7 @@ class DetectionQueriesMixin:
         """Get today's detection statistics"""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             # Get total detections today
@@ -69,7 +64,7 @@ class DetectionQueriesMixin:
         if date is None:
             date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             query = '''
@@ -101,7 +96,7 @@ class DetectionQueriesMixin:
 
     def get_detection_events(self, camera_id: int = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get recent detection events"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             query = '''
@@ -525,23 +520,24 @@ class DetectionQueriesMixin:
             return results
 
     def get_available_classes(self, hours: int = 24) -> List[str]:
-        """Get list of available classes in recent detections"""
+        """Get list of available classes in recent detections.
+
+        Uses the same SQLite ``datetime('now', ...)`` window as gallery browse
+        queries. Python ``isoformat()`` cutoffs (``T`` separator) do not
+        lexicographically match stored timestamps (``YYYY-MM-DD HH:MM:SS+00:00``).
+        """
+        hours = max(int(hours), 0)
         with self._connect() as conn:
             cursor = conn.cursor()
-
-            # Calculate timestamp for N hours ago
-            from datetime import datetime, timezone, timedelta
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
-            cutoff_str = cutoff_time.isoformat()
-
-            cursor.execute('''
+            cursor.execute(
+                f'''
                 SELECT DISTINCT class_name
                 FROM events
-                WHERE timestamp >= ?
-                  AND training_label IS NULL
+                WHERE timestamp >= datetime('now', '-{hours} hours')
+                  AND {self._GALLERY_LABEL_FILTER}
                 ORDER BY class_name
-            ''', [cutoff_str])
-
+                '''
+            )
             return [row[0] for row in cursor.fetchall()]
 
     def get_available_classes_for_date(self, date: str) -> List[str]:
@@ -549,11 +545,11 @@ class DetectionQueriesMixin:
         with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                '''
+                f'''
                 SELECT DISTINCT class_name
                 FROM events
                 WHERE DATE(timestamp) = ?
-                  AND training_label IS NULL
+                  AND {self._GALLERY_LABEL_FILTER}
                 ORDER BY class_name
                 ''',
                 [date],
@@ -570,37 +566,33 @@ class DetectionQueriesMixin:
             cursor = conn.cursor()
             if date:
                 cursor.execute(
-                    '''
+                    f'''
                     SELECT camera_id, COUNT(*) AS cnt
                     FROM events
                     WHERE DATE(timestamp) = ?
-                      AND training_label IS NULL
+                      AND {self._GALLERY_LABEL_FILTER}
                     GROUP BY camera_id
                     ORDER BY camera_id
                     ''',
                     [date],
                 )
             else:
-                h = hours if hours is not None else 24
-                from datetime import datetime, timezone, timedelta
-
-                cutoff = (datetime.now(timezone.utc) - timedelta(hours=h)).isoformat()
+                h = max(int(hours if hours is not None else 24), 0)
                 cursor.execute(
-                    '''
+                    f'''
                     SELECT camera_id, COUNT(*) AS cnt
                     FROM events
-                    WHERE timestamp >= ?
-                      AND training_label IS NULL
+                    WHERE timestamp >= datetime('now', '-{h} hours')
+                      AND {self._GALLERY_LABEL_FILTER}
                     GROUP BY camera_id
                     ORDER BY camera_id
-                    ''',
-                    [cutoff],
+                    '''
                 )
             return [{"camera_id": row[0], "count": row[1]} for row in cursor.fetchall()]
 
     def get_daily_detection_counts(self, start_date: str, end_date: str) -> Dict[str, int]:
         """Get detection counts for each day in a date range"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             cursor.execute('''
@@ -616,7 +608,7 @@ class DetectionQueriesMixin:
 
     def get_detection_counts_by_class_and_date(self, start_date: str, end_date: str) -> Dict[str, Dict[str, int]]:
         """Get detection counts by class for each day in a date range"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             cursor.execute('''
@@ -714,7 +706,7 @@ class DetectionQueriesMixin:
 
     def get_similar_detections(self, detection_id: int, position_threshold: int = 50) -> List[Dict[str, Any]]:
         """Get all detections similar to the given detection (same position/area)"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             # First get the reference detection
@@ -796,7 +788,7 @@ class DetectionQueriesMixin:
 
     def get_detection_timeline(self, group_key: tuple, hours: int = 24) -> List[Dict[str, Any]]:
         """Get all timestamps for detections in a similarity group for timeline visualization"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             cam_id, class_name, pos_x, pos_y, size_w, size_h = group_key
@@ -826,7 +818,7 @@ class DetectionQueriesMixin:
 
     def get_detection_timeline_for_date(self, group_key: tuple, date: str) -> List[Dict[str, Any]]:
         """Get all timestamps for detections in a similarity group for a specific date"""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
 
             cam_id, class_name, pos_x, pos_y, size_w, size_h = group_key
@@ -858,7 +850,7 @@ class DetectionQueriesMixin:
     def delete_detection(self, detection_id):
         """Delete a detection by its ID"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM events WHERE id = ?", (detection_id,))
                 deleted_rows = cursor.rowcount

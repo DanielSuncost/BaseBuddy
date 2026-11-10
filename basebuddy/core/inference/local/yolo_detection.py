@@ -177,13 +177,16 @@ class LocalYoloDetectionProvider(DetectionProvider):
             pass
 
         model_lock = self._night_lock if (self._active_is_night and self.night_model is not None) else self._day_lock
+        # Always pass conf explicitly. Downstream filters apply day/night/class
+        # thresholds; keep the model floor low so those filters see candidates.
+        infer_conf = min(max(float(conf_threshold or 0.35), 0.05), 0.25)
         start = time.time()
         try:
             if model_lock is not None:
                 with model_lock:
-                    results = model(frame, verbose=False)[0]
+                    results = model(frame, verbose=False, conf=infer_conf)[0]
             else:
-                results = model(frame, verbose=False)[0]
+                results = model(frame, verbose=False, conf=infer_conf)[0]
         finally:
             if gpu_granted and resource_manager is not None:
                 try:

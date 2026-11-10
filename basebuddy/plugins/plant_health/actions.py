@@ -12,8 +12,6 @@ Common hardware ecosystems (configure via webhook or MQTT):
   ESPHome     — native API or HA integration via MQTT
   Home Assistant — switch.turn_on, script.turn_on, rest_command.*
   Kasa/Tapo   — usually via HA or vendor cloud webhooks
-
-Premium: BaseBuddy Cloud can ship pre-built action templates per device.
 """
 from __future__ import annotations
 

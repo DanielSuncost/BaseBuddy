@@ -61,11 +61,18 @@ class TestEventSessions:
             db.create_event_session(
                 session_id=f"e{i}", camera_id=i % 2, class_name=cls, track_id=i,
                 confidence=0.5, snapshot_path=None, region_labels=None,
-                started_at=now,
+                started_at=now - i,
             )
         assert len(db.list_event_sessions()) == 3
         assert len(db.list_event_sessions(class_name="person")) == 2
         assert len(db.list_event_sessions(camera_id=0)) == 2
+        assert db.count_event_sessions() == 3
+        assert db.count_event_sessions(class_name="person") == 2
+        page = db.list_event_sessions(limit=2, offset=0)
+        assert len(page) == 2
+        page2 = db.list_event_sessions(limit=2, offset=2)
+        assert len(page2) == 1
+        assert {r["id"] for r in page} | {r["id"] for r in page2} == {"e0", "e1", "e2"}
 
 
 class TestNotificationRules:

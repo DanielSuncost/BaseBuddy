@@ -1,7 +1,5 @@
 
-"""
-Configuration management for BaseBuddy
-"""
+"""Load process configuration from the environment and config.txt."""
 import os
 import json
 from typing import Dict, Any, List
@@ -70,9 +68,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Core configuration
-# Load cameras dynamically - support up to 20 cameras
+# Load cameras dynamically (CAM1..CAM32)
 CAM_URLS = []
-for i in range(1, 21):  # Support up to 20 cameras
+for i in range(1, 33):
     url = DEF(f"CAM{i}", "")
     CAM_URLS.append(url)
 
@@ -118,6 +116,29 @@ try:
     DISK_FREE_MIN_GB = float(_df) if _df not in (None, "", "null") else 20.0
 except (TypeError, ValueError):
     DISK_FREE_MIN_GB = 20.0
+
+# Percentage floor for local disk-pressure eviction: effective floor is
+# max(DISK_FREE_MIN_GB, DISK_FREE_MIN_PERCENT % of that drive).
+def _float_env(key: str, default: float) -> float:
+    try:
+        v = DEF(key, None)
+        return float(v) if v not in (None, "", "null") else default
+    except (TypeError, ValueError):
+        return default
+
+
+DISK_FREE_MIN_PERCENT = _float_env("DISK_FREE_MIN_PERCENT", 5.0)
+# Warn when analytics.db grows past this size (GiB).
+ANALYTICS_DB_WARN_GB = _float_env("ANALYTICS_DB_WARN_GB", 10.0)
+
+# Adaptive external-drive budget (backup + archive share it per drive):
+#   floor  = max(BACKUP_MIN_FREE_GB GiB, BACKUP_MIN_FREE_PERCENT % of capacity)
+#   budget = min(BACKUP_MAX_PERCENT % of capacity, capacity - other data - floor)
+BACKUP_MAX_PERCENT = _float_env("BACKUP_MAX_PERCENT", 50.0)
+BACKUP_MIN_FREE_GB = _float_env("BACKUP_MIN_FREE_GB", 20.0)
+BACKUP_MIN_FREE_PERCENT = _float_env("BACKUP_MIN_FREE_PERCENT", 5.0)
+# While true, pruning only logs/reports what it would delete.
+BACKUP_PRUNE_DRY_RUN = str(DEF("BACKUP_PRUNE_DRY_RUN", "true")).strip().lower() not in ("false", "0", "no", "off")
 
 # Per-service retention (JSON). See Storage settings UI.
 RETENTION_POLICY_JSON = DEF("RETENTION_POLICY", "")
@@ -167,6 +188,9 @@ DISPLAY_TARGET_FPS = int(DEF("DISPLAY_TARGET_FPS", "12"))
 DETECTION_IDLE_FPS = float(DEF("DETECTION_IDLE_FPS", "0.5"))
 DETECTION_ACTIVE_FPS = float(DEF("DETECTION_ACTIVE_FPS", "4"))
 DETECTION_ACTIVE_SECS = float(DEF("DETECTION_ACTIVE_SECS", "12"))
+# Per-camera detection_fps slider/API bounds (not stream FPS). GPU is shared.
+DETECTION_FPS_MIN = float(DEF("DETECTION_FPS_MIN", "0.5"))
+DETECTION_FPS_MAX = float(DEF("DETECTION_FPS_MAX", "30"))
 
 
 def _int_env(key: str, fallback: int) -> int:

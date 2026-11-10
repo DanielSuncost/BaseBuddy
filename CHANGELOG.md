@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to BaseBuddy are documented here.
+## [Unreleased]
 
 ## [1.0.0] — 2026-06-27
 
@@ -44,12 +44,3 @@ All notable changes to BaseBuddy are documented here.
 
 - Document `chmod 600` for `.env` / `config.txt`
 - Calibration upload: validated camera id, extension whitelist, path confinement, 50-file cap
-
-## [Unreleased]
-
-See git history on `main` for ongoing work.
-
-## [0.1.0-alpha] — prior development
-
-- Modular pages architecture, inference provider, home scenes, gallery export
-- YOLOv8 detection, storage policy, backup/archive services

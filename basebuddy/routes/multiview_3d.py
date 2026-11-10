@@ -1,7 +1,4 @@
-"""
-Multiview 3D Reconstruction Routes
-API endpoints for camera calibration and 3D plant reconstruction
-"""
+"""Camera calibration and sparse-view reconstruction API."""
 
 import logging
 

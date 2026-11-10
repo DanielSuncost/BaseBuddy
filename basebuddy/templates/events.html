@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Events{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}?v=pag2">
 {% endblock %}
 {% block content %}
 <div class="page-header">
@@ -26,9 +26,74 @@
     <button type="button" class="btn btn-secondary" id="ev-refresh"><span class="material-icons-outlined">refresh</span> Refresh</button>
 </div>
 
+{# Pager sits above the list so "Showing X of Y" / Load earlier are visible without scrolling past a full page. #}
+<div class="events-pager" id="events-pager">
+    <span class="events-pager-meta" id="events-pager-meta">Loading…</span>
+    <button type="button" class="btn btn-primary" id="ev-load-earlier" disabled aria-disabled="true">
+        <span class="material-icons-outlined">history</span> Load earlier
+    </button>
+</div>
+
 <div class="events-list card" id="events-list">
     <p class="events-loading">Loading…</p>
 </div>
+<div class="events-pager events-pager-bottom" id="events-pager-bottom" hidden>
+    <span class="events-pager-meta" id="events-pager-meta-bottom"></span>
+    <button type="button" class="btn btn-primary" id="ev-load-earlier-bottom" disabled aria-disabled="true">
+        <span class="material-icons-outlined">expand_more</span> Load earlier
+    </button>
+</div>
 
-<script src="{{ url_for('static', filename='js/events.js') }}"></script>
+<!-- Event detail modal -->
+<div id="ev-modal" class="ev-modal" hidden>
+    <div class="ev-modal-backdrop" data-ev-close></div>
+    <div class="ev-modal-content" role="dialog" aria-modal="true" aria-labelledby="ev-modal-title">
+        <button type="button" class="ev-modal-close" data-ev-close aria-label="Close">&times;</button>
+        <div class="ev-modal-media">
+            <img id="ev-modal-img" class="ev-modal-image" alt="">
+            <video id="ev-modal-video" class="ev-modal-video" controls hidden></video>
+            <img id="ev-modal-gif" class="ev-modal-gif" alt="Nearby frames GIF" hidden>
+            <div id="ev-frame-strip" class="ev-frame-strip" hidden></div>
+        </div>
+        <div class="ev-modal-details">
+            <div class="ev-modal-header">
+                <h3 id="ev-modal-title">Event</h3>
+                <span id="ev-modal-badge" class="ev-modal-badge"></span>
+            </div>
+            <p id="ev-modal-meta" class="ev-modal-meta"></p>
+            <p id="ev-modal-regions" class="ev-modal-regions" hidden></p>
+            <div class="ev-modal-toolbar">
+                <label class="ev-window-label">Window
+                    <select id="ev-gif-window">
+                        <option value="5">±5s</option>
+                        <option value="10" selected>±10s</option>
+                        <option value="15">±15s</option>
+                        <option value="30">±30s</option>
+                    </select>
+                </label>
+            </div>
+            <div class="ev-modal-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="ev-btn-gif">
+                    <span class="material-icons-outlined">animation</span> Play nearby frames
+                </button>
+                <a class="btn btn-secondary btn-sm" id="ev-btn-clip" href="#" target="_blank" rel="noopener" hidden>
+                    <span class="material-icons-outlined">play_circle</span> Clip
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" id="ev-btn-stitch" hidden>
+                    <span class="material-icons-outlined">library_add</span> Stitch adjacent clips
+                </button>
+            </div>
+            <p id="ev-modal-status" class="ev-modal-status" hidden></p>
+            <div id="ev-stitch-panel" class="ev-stitch-panel" hidden>
+                <div class="ev-stitch-heading">Adjacent clips <span id="ev-stitch-count"></span></div>
+                <ul id="ev-stitch-list" class="ev-stitch-list"></ul>
+                <button type="button" class="btn btn-primary btn-sm" id="ev-btn-stitch-run">
+                    <span class="material-icons-outlined">merge</span> Stitch selected (no overlap)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/events.js') }}?v=pag2"></script>
 {% endblock %}

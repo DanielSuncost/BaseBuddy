@@ -1,7 +1,4 @@
-"""
-Power Management Module for BaseBuddy
-Provides incremental power scaling based on time of day and detection quality.
-"""
+"""Detection rate scaling by time of day and recent detection quality."""
 import time
 from datetime import datetime, time as dt_time
 from typing import Dict, Optional, Tuple
@@ -98,7 +95,30 @@ class PowerManager:
         # Per-camera timestamps of the last allowed detection, used to rate
         # limit detection to the profile's ai_fps for each camera.
         self._last_detection_times: Dict = {}
-        
+        # Per-camera AI FPS overrides from camera profiles (None = use power profile).
+        self._camera_ai_fps: Dict = {}
+
+    def set_camera_ai_fps(self, camera_id, fps) -> None:
+        """Set or clear a per-camera detection FPS override from the camera profile."""
+        if camera_id is None:
+            return
+        if fps is None:
+            self._camera_ai_fps.pop(camera_id, None)
+            return
+        try:
+            value = float(fps)
+        except (TypeError, ValueError):
+            return
+        if value <= 0:
+            self._camera_ai_fps.pop(camera_id, None)
+            return
+        try:
+            from basebuddy.modules.config import DETECTION_FPS_MIN, DETECTION_FPS_MAX
+            lo, hi = float(DETECTION_FPS_MIN), float(DETECTION_FPS_MAX)
+        except Exception:
+            lo, hi = 0.5, 30.0
+        self._camera_ai_fps[camera_id] = max(lo, min(value, hi))
+
     def is_night_time(self) -> bool:
         """Check if current time is within night hours"""
         now = datetime.now().time()
@@ -164,15 +184,16 @@ class PowerManager:
         return frame_count % frame_skip_rate == 0
     
     def should_run_detection(self, camera_id=None) -> bool:
-        """Rate-limit detection to the profile's ai_fps, per camera.
+        """Rate-limit detection to ai_fps, per camera.
 
-        The previous implementation used a single global 1-second window
-        shared by all cameras, so cameras starved each other, and fractional
-        ai_fps values truncated to zero (int(0.5) == 0), silently disabling
-        detection entirely at the MINIMUM profile.
+        Uses the camera profile override when set (detection_fps), otherwise
+        the active power profile's ai_fps. Per-camera overrides let a camera
+        request a higher sampling rate for tracking without changing global power.
         """
         settings = self.get_current_settings()
         ai_fps = float(settings.get('ai_fps', 3))
+        if camera_id is not None and camera_id in self._camera_ai_fps:
+            ai_fps = float(self._camera_ai_fps[camera_id])
 
         if ai_fps <= 0:
             return False

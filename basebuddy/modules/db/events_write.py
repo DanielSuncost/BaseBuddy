@@ -1,9 +1,4 @@
-"""Detection event ingestion: dedup, false-positive zones, labeling, stats.
-
-Mixin for :class:`modules.database.AnalyticsDB`. Split out of the original
-monolithic database module; methods are verbatim and share the same
-connection helpers on the composed class.
-"""
+"""AnalyticsDB mixin: detection ingest, dedup, ignore zones, labels, stats."""
 import os
 import sqlite3
 import logging
@@ -38,89 +33,89 @@ class DetectionEventsMixin:
         
         for attempt in range(max_retries):
             try:
-                conn = self._connect()  # Use proper connection with WAL mode and timeout
-                cursor = conn.cursor()
                 session_hooks = []
+                with self._connect() as conn:
+                    cursor = conn.cursor()
 
-                fp_zones = []
-                if FALSE_POSITIVE_ZONES_ENABLE:
-                    try:
-                        fp_zones = self._load_false_positive_zones_for_camera(cursor, camera_id)
-                    except Exception:
-                        fp_zones = []
-
-                for i in range(len(detections)):
-                    # Get class name
-                    class_id = int(detections.class_id[i])
-                    if class_name_func:
-                        class_name = class_name_func(class_id)
-                    else:
-                        class_name = f"class_{class_id}"
-
-                    # Get confidence
-                    confidence = float(detections.confidence[i])
-
-                    # Get bounding box
-                    bbox = detections.xyxy[i]
-                    x1, y1, x2, y2 = map(float, bbox)
-
-                    # Get track ID if available
-                    track_id = None
-                    if hasattr(detections, 'tracker_id') and detections.tracker_id is not None:
-                        track_id = int(detections.tracker_id[i]) if detections.tracker_id[i] is not None else None
-
-                    det_region_labels = None
-                    if region_labels and i < len(region_labels):
-                        det_region_labels = region_labels[i]
-                    elif hasattr(detections, 'data') and detections.data.get('region_labels'):
-                        rl = detections.data['region_labels']
-                        if i < len(rl):
-                            det_region_labels = rl[i]
-
-                    # Deduplicate near-identical detections in recent window
-                    try:
-                        if DEDUP_ENABLE:
-                            if self._is_duplicate_event(cursor, camera_id, class_name, x1, y1, x2, y2, frame, track_id):
-                                continue
-                    except Exception as _e:
-                        # Fail open if any issue
-                        pass
-
-                    if FALSE_POSITIVE_ZONES_ENABLE and fp_zones:
+                    fp_zones = []
+                    if FALSE_POSITIVE_ZONES_ENABLE:
                         try:
-                            if self._matches_false_positive_zone(fp_zones, class_name, x1, y1, x2, y2):
-                                continue
+                            fp_zones = self._load_false_positive_zones_for_camera(cursor, camera_id)
                         except Exception:
+                            fp_zones = []
+
+                    for i in range(len(detections)):
+                        # Get class name
+                        class_id = int(detections.class_id[i])
+                        if class_name_func:
+                            class_name = class_name_func(class_id)
+                        else:
+                            class_name = f"class_{class_id}"
+
+                        # Get confidence
+                        confidence = float(detections.confidence[i])
+
+                        # Get bounding box
+                        bbox = detections.xyxy[i]
+                        x1, y1, x2, y2 = map(float, bbox)
+
+                        # Get track ID if available
+                        track_id = None
+                        if hasattr(detections, 'tracker_id') and detections.tracker_id is not None:
+                            track_id = int(detections.tracker_id[i]) if detections.tracker_id[i] is not None else None
+
+                        det_region_labels = None
+                        if region_labels and i < len(region_labels):
+                            det_region_labels = region_labels[i]
+                        elif hasattr(detections, 'data') and detections.data.get('region_labels'):
+                            rl = detections.data['region_labels']
+                            if i < len(rl):
+                                det_region_labels = rl[i]
+
+                        # Deduplicate near-identical detections in recent window
+                        try:
+                            if DEDUP_ENABLE:
+                                if self._is_duplicate_event(cursor, camera_id, class_name, x1, y1, x2, y2, frame, track_id):
+                                    continue
+                        except Exception as _e:
+                            # Fail open if any issue
                             pass
 
-                    # Extract and save images (thumbnail + full-size padded crop)
-                    thumbnail_path = None
-                    full_image_path = None
-                    if frame is not None:
-                        thumbnail_path, full_image_path = self._save_detection_images(frame, x1, y1, x2, y2, camera_id, timestamp, i)
+                        if FALSE_POSITIVE_ZONES_ENABLE and fp_zones:
+                            try:
+                                if self._matches_false_positive_zone(fp_zones, class_name, x1, y1, x2, y2):
+                                    continue
+                            except Exception:
+                                pass
 
-                    cursor.execute('''
-                        INSERT INTO events (camera_id, timestamp, class_name, confidence,
-                                          bbox_x1, bbox_y1, bbox_x2, bbox_y2, track_id, thumbnail_path, full_image_path, region_labels)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (camera_id, timestamp, class_name, confidence, x1, y1, x2, y2, track_id, thumbnail_path, full_image_path, det_region_labels))
+                        # Extract and save images (thumbnail + full-size padded crop)
+                        thumbnail_path = None
+                        full_image_path = None
+                        if frame is not None:
+                            thumbnail_path, full_image_path = self._save_detection_images(frame, x1, y1, x2, y2, camera_id, timestamp, i)
 
-                    # Update hourly and daily stats
-                    self._update_hourly_stats(cursor, camera_id, timestamp, class_name, confidence)
-                    self._update_daily_stats(cursor, camera_id, timestamp, class_name, confidence)
+                        cursor.execute('''
+                            INSERT INTO events (camera_id, timestamp, class_name, confidence,
+                                              bbox_x1, bbox_y1, bbox_x2, bbox_y2, track_id, thumbnail_path, full_image_path, region_labels)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (camera_id, timestamp, class_name, confidence, x1, y1, x2, y2, track_id, thumbnail_path, full_image_path, det_region_labels))
 
-                    session_hooks.append({
-                        'camera_id': camera_id,
-                        'class_name': class_name,
-                        'confidence': confidence,
-                        'track_id': track_id,
-                        'thumbnail_path': thumbnail_path,
-                        'full_image_path': full_image_path,
-                        'region_labels': det_region_labels,
-                    })
+                        # Update hourly and daily stats
+                        self._update_hourly_stats(cursor, camera_id, timestamp, class_name, confidence)
+                        self._update_daily_stats(cursor, camera_id, timestamp, class_name, confidence)
 
-                conn.commit()
-                conn.close()
+                        session_hooks.append({
+                            'camera_id': camera_id,
+                            'class_name': class_name,
+                            'confidence': confidence,
+                            'track_id': track_id,
+                            'thumbnail_path': thumbnail_path,
+                            'full_image_path': full_image_path,
+                            'region_labels': det_region_labels,
+                        })
+
+                    conn.commit()
+
                 for hook in session_hooks:
                     try:
                         from basebuddy.core.services.event_session_service import get_event_session_service
@@ -152,23 +147,7 @@ class DetectionEventsMixin:
                     # Database is locked, retry after a delay
                     import time
                     time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
                     continue
-                else:
-                    # Max retries exceeded or different error
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-                    raise
-            except Exception as e:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
                 raise
 
     # ---------- Deduplication helpers ----------

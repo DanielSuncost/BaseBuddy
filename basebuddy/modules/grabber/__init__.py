@@ -92,7 +92,9 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
         self._last_detections_for_record = []
 
         # Detection threading / IPC
-        self.detection_queue = collections.deque(maxlen=30)  # Increased buffer to prevent frame drops
+        # Keep only the newest pending frames. A deep FIFO backlog makes boxes lag
+        # far behind the live wall (each inference is ~0.5–2s).
+        self.detection_queue = collections.deque(maxlen=2)
         # Kept for health-monitor compatibility; annotated frames are exposed via
         # latest_annotated_frame / latest_detection_jpeg_bytes, not stored per-timestamp.
         self.detection_results = {}
@@ -108,8 +110,19 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
         self.last_annotated_frame = None
         self.last_det_count = 0
         self.last_detection_ts = 0.0
+        # Capture timestamp of the frame that produced last_detections (for overlay age).
+        self.last_detection_frame_ts = 0.0
         self.watchdog_thread = None
+        self._detection_generation = 0
+        self._detection_worker_started_ts = 0.0
+        self._last_detection_restart_ts = 0.0
+        self._abandoned_detection_thread = None
+        self._stall_persist_log_ts = 0.0
+        self._tx_full_log_ts = 0.0
         self.last_detections = []  # recent detections for click hit-test
+        # Wall overlay trail cache: track_id -> list of (x, y, ts). Updated from
+        # detection results so trails work even when multiproc keeps history elsewhere.
+        self.wall_track_trails = {}
 
         # Display stream caching (decoupled from detection pipeline)
         self.display_max_width = DISPLAY_MAX_WIDTH
@@ -131,6 +144,8 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
 
         # Camera enabled flag (controls frame grabbing)
         self.camera_enabled: bool = True
+        # Per-camera AI flag from profile (video-only => False; skips enqueue/YOLO)
+        self.detection_enabled: bool = True
 
     def start(self):
         """Start the frame grabbing thread"""
@@ -138,10 +153,13 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
             return
 
         self.running = True
+        # stop() clears this; restore so the grab loop actually opens the stream
+        self.camera_enabled = True
         self.thread = threading.Thread(target=self._grab_frames, daemon=True)
         self.thread.start()
 
-        self.start_detection_thread()
+        if self.detection_enabled:
+            self.start_detection_thread()
 
     def stop(self):
         """Stop the frame grabbing thread and clean up all resources"""
@@ -157,6 +175,12 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
                 cap.release()
             except Exception as e:
                 logger.warning(f"Camera {self.cam_id}: Error releasing capture: {e}")
+
+        # Kill ffmpeg pipe if used (RTMP/HLS)
+        try:
+            self._stop_ffmpeg_pipe()
+        except Exception:
+            pass
 
         # Stop recording first
         try:
@@ -218,3 +242,7 @@ class FrameGrabber(CaptureMixin, RecordingMixin, DetectionPipelineMixin, StillsM
             self.latest_annotated_ts = None
             self.last_annotated_frame = None
             self.last_det_count = 0
+            self.last_detection_ts = 0.0
+            self.last_detection_frame_ts = 0.0
+            self.last_detections = []
+            self.wall_track_trails = {}

@@ -2,7 +2,7 @@
 {% block title %}Plant Monitoring{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/scenes.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/plants.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/plants.css') }}?v=evo18">
 {% endblock %}
 {% block content %}
 
@@ -30,42 +30,63 @@
 </nav>
 
 <div id="plants-panel-monitor">
-<section class="card plants-settings-card">
-    <h2 class="plants-section-title">Vision API <span class="plants-hint">optional — OpenAI-compatible</span></h2>
-    <div class="plants-settings-grid">
-        <label>API URL<input type="url" id="pv-url" placeholder="https://api.openai.com/v1/chat/completions"></label>
-        <label>Model<input type="text" id="pv-model" placeholder="gpt-4o-mini"></label>
-        <label>API key<input type="password" id="pv-key" autocomplete="off" placeholder="sk-…"></label>
-    </div>
-    <button type="button" class="btn btn-secondary btn-sm" id="pv-save">Save API settings</button>
-    <p id="pv-status" class="plants-muted"></p>
-</section>
+<div class="plants-tool-row">
+    <details class="card plants-tool-tile" id="plants-vision-tile">
+        <summary>
+            <span class="material-icons-outlined plants-tool-icon">visibility</span>
+            <span class="plants-tool-copy">
+                <span class="plants-tool-title">Vision API</span>
+                <span class="plants-tool-sub">Send images of your plant to AI model for qualitative monitoring</span>
+            </span>
+        </summary>
+        <div class="plants-tool-body">
+            <div class="plants-settings-grid">
+                <label>API URL<input type="url" id="pv-url" placeholder="https://api.openai.com/v1/chat/completions"></label>
+                <label>Model<input type="text" id="pv-model" placeholder="gpt-4o-mini"></label>
+                <label>API key<input type="password" id="pv-key" autocomplete="off" placeholder="sk-…"></label>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="pv-save">Save API settings</button>
+            <p id="pv-status" class="plants-muted"></p>
+        </div>
+    </details>
 
-<details class="card plants-actions-help">
-    <summary>Actions — pumps, lights, webhooks</summary>
-    <p class="plants-muted">
-        Hook any device via <strong>webhook</strong> (Shelly HTTP, IFTTT), <strong>MQTT</strong>
-        (Tasmota, Home Assistant, Zigbee2MQTT), or <strong>Home Assistant REST</strong>.
-        Configure per-plant actions in monitor JSON or upcoming UI — triggers: on sample, manual, water recommendation.
-    </p>
-    <ul class="plants-protocol-list">
-        <li>Shelly — <code>http://&lt;ip&gt;/relay/0?turn=on</code></li>
-        <li>Tasmota — MQTT <code>cmnd/device/POWER ON</code></li>
-        <li>Home Assistant — <code>/api/services/switch/turn_on</code></li>
-    </ul>
-</details>
+    <details class="card plants-tool-tile" id="plants-actions-tile">
+        <summary>
+            <span class="material-icons-outlined plants-tool-icon">bolt</span>
+            <span class="plants-tool-copy">
+                <span class="plants-tool-title">Actions</span>
+                <span class="plants-tool-sub">Pumps, lights, and webhooks</span>
+                <span class="plants-coming-soon">Coming soon</span>
+            </span>
+        </summary>
+        <div class="plants-tool-body">
+            <p class="plants-muted">
+                Coming soon — hook devices via <strong>webhook</strong> (Shelly HTTP, IFTTT),
+                <strong>MQTT</strong> (Tasmota, Home Assistant, Zigbee2MQTT), or
+                <strong>Home Assistant REST</strong>.
+            </p>
+            <ul class="plants-protocol-list">
+                <li>Shelly — <code>http://&lt;ip&gt;/relay/0?turn=on</code></li>
+                <li>Tasmota — MQTT <code>cmnd/device/POWER ON</code></li>
+                <li>Home Assistant — <code>/api/services/switch/turn_on</code></li>
+            </ul>
+        </div>
+    </details>
+</div>
 
-<section class="card">
+<section class="card" id="plants-grid-section">
     <div class="card-header">
         <span>Monitored plants</span>
         <button type="button" class="btn btn-primary" id="plants-add">
             <span class="material-icons-outlined">add</span> Add plant
         </button>
     </div>
-    <div id="plants-list" class="plants-list">
+    <div id="plants-list" class="plants-grid">
         <p class="scenes-muted">Loading…</p>
     </div>
 </section>
+
+<section id="plants-detail" class="plants-detail" hidden></section>
 </div>
 
 <div id="plants-panel-blogger" hidden>
@@ -106,6 +127,11 @@
             <label>Species hint <span class="setup-optional">optional</span>
                 <input type="text" name="species_hint" placeholder="Monstera deliciosa">
             </label>
+            <label>Same plant as <span class="setup-optional">another camera angle</span>
+                <select name="same_plant" id="plant-same-as">
+                    <option value="">New plant</option>
+                </select>
+            </label>
             <div class="scenes-field">
                 <span class="scenes-field-label">Camera</span>
                 <div id="plant-camera-picker" class="scenes-camera-picker"></div>
@@ -123,7 +149,7 @@
             <label id="plant-times-wrap" hidden>Daily times (comma-separated, 24h)
                 <input type="text" name="schedule_times" placeholder="08:00, 18:00">
             </label>
-            <p class="plants-muted">After creating, use <strong>Set plant region</strong> on the card to click-segment the plant (left = plant, right = background).</p>
+            <p class="plants-muted">After creating, use <strong>Set plant region</strong> / <strong>Edit mask</strong> on the plant card to click-segment the plant (left = plant, right = background).</p>
             <label>Pattern index <span class="setup-optional">optional — advanced</span>
                 <input type="number" name="pattern_id" min="-1" value="-1" placeholder="-1 = latest">
             </label>
@@ -218,16 +244,35 @@
 
 <div id="plant-segment-modal" class="scenes-modal" hidden>
     <div class="scenes-modal-inner card scenes-add-modal plant-segment-modal">
-        <h2><span class="material-icons-outlined">masks</span> Set plant region</h2>
+        <h2><span class="material-icons-outlined">masks</span> Edit plant mask</h2>
         <p class="plants-segment-hint">
-            <span class="plant-hint-fg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Left-click</span> on the plant ·
-            <span class="plant-hint-bg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Right-click</span> on background
+            <button type="button" class="btn btn-secondary btn-sm" id="plant-segment-set-crop">Set crop</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="plant-segment-clear-crop">Clear crop</button>
+            <span class="plant-segment-crop-badge" id="plant-segment-crop-badge" hidden>Crop on</span>
+            <span class="plant-hint-fg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Left-click</span> plant ·
+            <span class="plant-hint-bg"><span class="material-icons-outlined icon-sm">radio_button_checked</span> Right-click</span> background
         </p>
         <div class="plant-segment-canvas-wrap">
             <canvas id="plant-segment-canvas"></canvas>
             <div id="plant-segment-loading" class="plant-segment-loading" hidden>Loading frame…</div>
         </div>
+        <label class="plant-segment-refine">
+            <span>Carve non-green <strong id="plant-segment-refine-val">0</strong></span>
+            <input type="range" id="plant-segment-green-refine" min="0" max="10" step="0.1" value="0">
+        </label>
+        <label class="plant-segment-refine">
+            <span>Keep darker than <strong id="plant-segment-luma-val">off</strong></span>
+            <input type="range" id="plant-segment-luma-carve" min="0" max="100" step="1" value="0">
+        </label>
         <p id="plant-segment-status" class="plants-muted plant-segment-status"></p>
+        <div class="plant-segment-options">
+            <label class="plants-check">
+                <input type="checkbox" id="plant-segment-new-series"> Save as a new series
+            </label>
+            <label class="plants-check">
+                <input type="checkbox" id="plant-segment-reanalyze"> Also rebuild past stills
+            </label>
+        </div>
         <div class="scenes-modal-actions">
             <button type="button" class="btn btn-secondary btn-sm" id="plant-segment-reset">
                 <span class="material-icons-outlined icon-sm">refresh</span> Reset
@@ -235,14 +280,15 @@
             <span class="plant-segment-spacer"></span>
             <button type="button" class="btn btn-secondary" id="plant-segment-cancel">Cancel</button>
             <button type="button" class="btn btn-primary" id="plant-segment-save">
-                <span class="material-icons-outlined icon-sm">save</span> Save region
+                <span class="material-icons-outlined icon-sm">save</span> Save mask
             </button>
         </div>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/plants_color_viz.js') }}"></script>
-<script src="{{ url_for('static', filename='js/plant_segment_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plants_color_viz.js') }}?v=evo18"></script>
+<script src="{{ url_for('static', filename='js/plants_sam_growth.js') }}?v=evo18"></script>
+<script src="{{ url_for('static', filename='js/plant_segment_editor.js') }}?v=evo18"></script>
 <script src="{{ url_for('static', filename='js/plants_blogger.js') }}"></script>
-<script src="{{ url_for('static', filename='js/plants.js') }}"></script>
+<script src="{{ url_for('static', filename='js/plants.js') }}?v=evo18"></script>
 {% endblock %}

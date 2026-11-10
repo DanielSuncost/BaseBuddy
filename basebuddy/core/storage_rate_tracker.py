@@ -150,7 +150,8 @@ def get_detection_event_rates(db_path: str, days: int = 7) -> Dict[str, Any]:
         return {"events_per_day": 0, "daily_counts": [], "source": "unavailable"}
 
     try:
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        try:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -163,6 +164,8 @@ def get_detection_event_rates(db_path: str, days: int = 7) -> Dict[str, Any]:
                 (f"-{int(days)} days",),
             )
             rows = cursor.fetchall()
+        finally:
+            conn.close()
     except Exception as exc:
         logger.debug("Detection rate query failed: %s", exc)
         return {"events_per_day": 0, "daily_counts": [], "source": "error"}
@@ -195,7 +198,8 @@ def get_detection_rates_by_camera(
 
     names = camera_names or {}
     try:
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        try:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -222,6 +226,8 @@ def get_detection_rates_by_camera(
                 (f"-{int(days)} days",),
             )
             class_rows = cursor.fetchall()
+        finally:
+            conn.close()
     except Exception as exc:
         logger.debug("Per-camera detection rate query failed: %s", exc)
         return {"cameras": [], "total_events": 0, "days": days, "source": "error"}

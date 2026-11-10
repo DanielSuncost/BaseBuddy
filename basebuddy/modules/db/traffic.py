@@ -1,9 +1,4 @@
-"""Traffic analysis track storage and aggregate queries.
-
-Mixin for :class:`modules.database.AnalyticsDB`. Split out of the original
-monolithic database module; methods are verbatim and share the same
-connection helpers on the composed class.
-"""
+"""AnalyticsDB mixin: traffic tracks and aggregates."""
 import os
 import sqlite3
 import logging
@@ -59,40 +54,30 @@ class TrafficMixin:
             
             for attempt in range(max_retries):
                 try:
-                    conn = self._connect()  # Use proper connection with WAL mode and timeout
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO traffic_tracks (
-                            camera_id, track_id, start_ts, end_ts, duration_s,
-                            start_x, start_y, end_x, end_y,
-                            distance_px, distance_m, speed_mps, speed_kph, direction_deg, path_json,
-                            region_label, class_name
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        int(camera_id), int(track_id), float(t1), float(t2), float(duration),
-                        float(x1), float(y1), float(x2), float(y2),
-                        float(dist_px), float(dist_m), float(speed_mps), float(speed_kph), float(direction_deg), path_json,
-                        region_label, class_name,
-                    ))
-                    conn.commit()
-                    conn.close()
+                    with self._connect() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            INSERT INTO traffic_tracks (
+                                camera_id, track_id, start_ts, end_ts, duration_s,
+                                start_x, start_y, end_x, end_y,
+                                distance_px, distance_m, speed_mps, speed_kph, direction_deg, path_json,
+                                region_label, class_name
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            int(camera_id), int(track_id), float(t1), float(t2), float(duration),
+                            float(x1), float(y1), float(x2), float(y2),
+                            float(dist_px), float(dist_m), float(speed_mps), float(speed_kph), float(direction_deg), path_json,
+                            region_label, class_name,
+                        ))
+                        conn.commit()
                     return True
                     
                 except sqlite3.OperationalError as e:
                     if 'locked' in str(e).lower() and attempt < max_retries - 1:
                         import time
                         time.sleep(retry_delay * (2 ** attempt))
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
                         continue
-                    else:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                        raise
+                    raise
                         
         except Exception as e:
             logger.error(f"Error saving traffic track: {e}")
@@ -102,7 +87,7 @@ class TrafficMixin:
                                  region_label: Optional[str] = None,
                                  class_name: Optional[str] = None) -> list:
         """Return hourly counts and avg speeds for the given local date (YYYY-MM-DD)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             params = [date]
             extra = ''
@@ -130,7 +115,7 @@ class TrafficMixin:
                                     bin_size_deg: int = 45, region_label: Optional[str] = None,
                                     class_name: Optional[str] = None) -> list:
         """Return direction bin counts (0-360, bins of bin_size_deg)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             params = [date]
             extra = ''
@@ -162,7 +147,7 @@ class TrafficMixin:
     def get_recent_traffic_tracks(self, camera_id: int, limit: int = 50,
                                   region_label: Optional[str] = None,
                                   class_name: Optional[str] = None) -> list:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             params = [camera_id]
             extra = ''
@@ -204,7 +189,7 @@ class TrafficMixin:
         newest first, capped at `limit` tracks.
         """
         import json as _json
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             params = [camera_id, float(start_ts), float(end_ts)]
             extra = ''
@@ -242,7 +227,7 @@ class TrafficMixin:
 
     def get_traffic_sources(self) -> list:
         """Distinct (camera, region, class) combos with track counts, most recent first."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT camera_id, COALESCE(region_label, ''), COALESCE(class_name, ''),

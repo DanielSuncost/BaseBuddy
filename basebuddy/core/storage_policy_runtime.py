@@ -9,6 +9,7 @@ import basebuddy.modules.state as app_state
 from basebuddy.core.premium_hooks import resolve_remote_backend
 from basebuddy.core.retention_config import normalize_retention_policy, retention_policy_from_env
 from basebuddy.core.services.object_storage import S3ObjectStorage
+from basebuddy.core.storage_budget import settings_from_config
 from basebuddy.core.storage_paths import abs_under_project, build_archive_source_dirs, build_retention_source_dirs, project_root_from_here
 
 logger = logging.getLogger("basebuddy")
@@ -74,6 +75,7 @@ def apply_runtime_storage_policy() -> Dict[str, Any]:
                 backup_interval_hours=cfg.BACKUP_INTERVAL_HOURS,
                 backup_max_age_hours=cfg.BACKUP_MAX_AGE_HOURS,
                 enabled=cfg.BACKUP_ENABLED,
+                budget_settings=settings_from_config(cfg),
             )
         except Exception as exc:
             logger.exception("BackupManager apply_runtime_settings: %s", exc)
@@ -141,6 +143,11 @@ def current_settings_snapshot() -> Dict[str, Any]:
         "BACKUP_FOLDER": cfg.BACKUP_FOLDER,
         "BACKUP_INTERVAL_HOURS": cfg.BACKUP_INTERVAL_HOURS,
         "BACKUP_MAX_AGE_HOURS": cfg.BACKUP_MAX_AGE_HOURS,
+        "BACKUP_MAX_PERCENT": getattr(cfg, "BACKUP_MAX_PERCENT", 50.0),
+        "BACKUP_MIN_FREE_GB": getattr(cfg, "BACKUP_MIN_FREE_GB", 20.0),
+        "BACKUP_MIN_FREE_PERCENT": getattr(cfg, "BACKUP_MIN_FREE_PERCENT", 5.0),
+        "BACKUP_PRUNE_DRY_RUN": getattr(cfg, "BACKUP_PRUNE_DRY_RUN", True),
+        "DISK_FREE_MIN_PERCENT": getattr(cfg, "DISK_FREE_MIN_PERCENT", 5.0),
         "ARCHIVE_ENABLED": cfg.ARCHIVE_ENABLED,
         "ARCHIVE_DRIVE_PATH": cfg.ARCHIVE_DRIVE_PATH,
         "ARCHIVE_FOLDER": cfg.ARCHIVE_FOLDER,

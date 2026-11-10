@@ -202,7 +202,7 @@ def get_tracking_status():
 
         status = {}
         for cam_id, detector in shared_state.detectors.items():
-            track_count = len(getattr(detector, 'tracks', {}))
+            track_count = len(getattr(detector, 'track_history', {}) or {})
             status[cam_id] = {
                 'active_tracks': track_count,
                 'enabled': True

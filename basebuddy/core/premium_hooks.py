@@ -1,14 +1,8 @@
-"""
-Optional premium (managed cloud) integration.
+"""Hooks for an optional managed-cloud package.
 
-The open-source tree ships BYO S3/R2 only. Hosted premium installs a separate
-private package, e.g. `basebuddy_premium`, that registers managed cloud storage.
-
-Recommended layout (two repos, same app):
-  basebuddy/          — public OSS (this repo)
-  basebuddy-premium/  — private pip package imported at runtime
-
-Keep premium as a thin overlay; never fork core UI — only extend via these hooks.
+This tree resolves remote storage as operator-supplied S3, R2, or B2.
+A private package such as `basebuddy_premium` may register at import
+and override these hooks. It does not replace the core UI.
 """
 from __future__ import annotations
 

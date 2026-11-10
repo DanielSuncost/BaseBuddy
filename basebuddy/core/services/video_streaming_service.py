@@ -1,8 +1,4 @@
-"""
-Video streaming service.
-
-Provides MJPEG stream generators for camera feeds with and without ML annotations.
-"""
+"""MJPEG generators for raw and annotated camera frames."""
 import cv2
 import numpy as np
 import time
@@ -32,18 +28,18 @@ def mjpeg_generator(cam_id, grabbers_dict, jpeg_quality=85):
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         else:
             grabber = grabbers_dict[cam_id]
-            frame, ts = grabber.get_latest_frame()
+            # Live frame + detection overlays (not a frozen annotated snapshot)
+            if hasattr(grabber, 'get_latest_wall_frame'):
+                frame, ts = grabber.get_latest_wall_frame()
+            else:
+                frame, ts = grabber.get_latest_frame()
             
             if frame is None:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 cv2.putText(frame, f"Camera {cam_id+1}: Connecting...", (50, 240),
                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
             else:
-                # Use annotated frame if available
                 with grabber.lock:
-                    if hasattr(grabber, 'last_annotated_frame') and grabber.last_annotated_frame is not None:
-                        frame = grabber.last_annotated_frame.copy()
-                    
                     # Overlay detection count
                     if hasattr(grabber, 'last_det_count'):
                         det_count = int(getattr(grabber, 'last_det_count', 0))

@@ -16,6 +16,8 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
+from basebuddy.core.storage_budget import drive_budget_for, drive_state, settings_from_config
+
 logger = logging.getLogger("basebuddy")
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
@@ -139,18 +141,32 @@ class ArchiveService:
 
     # -- drive checks --------------------------------------------------------
 
+    def drive_state(self):
+        return drive_state(self.archive_drive_path, self.archive_path)
+
     def is_drive_available(self) -> bool:
+        """Mounted and writable.  A full drive is handled by the shared budget pruner."""
+        state, _reason = self.drive_state()
+        return state in ("ok", "full")
+
+    def _drive_budget(self):
+        """Archive shares one adaptive budget with backups on the same physical drive."""
+        if not os.path.isdir(self.archive_drive_path):
+            return None
+        from basebuddy.core.paths import get_repo_root
+
+        db = drive_budget_for(self.archive_drive_path)
+        db.register(self.archive_path, os.path.join(get_repo_root(), ".archive_manifest.json"))
+        return db
+
+    def _make_room(self, need_bytes: int) -> None:
+        db = self._drive_budget()
+        if db is None:
+            return
         try:
-            if not os.path.exists(self.archive_drive_path):
-                return False
-            os.makedirs(self.archive_path, exist_ok=True)
-            probe = os.path.join(self.archive_path, ".write_test")
-            with open(probe, "w") as fh:
-                fh.write("ok")
-            os.remove(probe)
-            return True
-        except Exception:
-            return False
+            db.prune(settings_from_config(), need_bytes=need_bytes)
+        except Exception as exc:
+            logger.error("Archive prune failed: %s", exc)
 
     # -- core archive logic --------------------------------------------------
 
@@ -180,13 +196,18 @@ class ArchiveService:
         Returns bytes freed (0 on failure).
         """
         dest = os.path.join(self.archive_path, label, rel)
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
         try:
             size = os.path.getsize(src)
+            self._make_room(size)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy2(src, dest)
             if os.path.getsize(dest) != size:
                 logger.warning("Size mismatch after copy: %s", src)
                 return 0
+            db = self._drive_budget()
+            if db is not None and self.archive_path in db.roots:
+                db.roots[self.archive_path].add(os.path.join(label, rel), size,
+                                                os.path.getmtime(dest))
             os.remove(src)
             return size
         except Exception as exc:
@@ -229,6 +250,10 @@ class ArchiveService:
 
         for src_dir in self.source_dirs.values():
             self._prune_empty_dirs(src_dir)
+        db = self._drive_budget()
+        if db is not None:
+            for m in db.roots.values():
+                m.save()
 
         self._state["last_run"] = time.time()
         self._state["total_archived"] = self._state.get("total_archived", 0) + archived
@@ -303,6 +328,7 @@ class ArchiveService:
             "enabled": self.enabled,
             "running": self.running,
             "drive_available": self.is_drive_available(),
+            "drive_state": self.drive_state()[0],
             "archive_path": self.archive_path,
             "interval_days": self.interval_seconds // 86400,
             "min_age_days": self.min_age_seconds // 86400,

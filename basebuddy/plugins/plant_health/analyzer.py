@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-from basebuddy.plugins.plant_health.prompts import build_oss_prompt
+from basebuddy.plugins.plant_health.prompts import build_multi_angle_prompt, build_oss_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -108,4 +108,63 @@ class OSSPlantAnalyzer:
             return parsed
         except Exception as exc:
             logger.warning("Plant vision API failed: %s", exc)
+            return {"ok": False, "error": str(exc), "health_score": None, "analyzer": self.name}
+
+    def analyze_brief(
+        self,
+        brief: Dict[str, Any],
+        images: list,
+    ) -> Dict[str, Any]:
+        """Send the formal multi-angle brief plus one JPEG per camera."""
+        from basebuddy.modules.config import env_live
+
+        api_url = (env_live("PLANT_VISION_API_URL") or "").strip()
+        api_key = (env_live("PLANT_VISION_API_KEY") or "").strip()
+        model = (env_live("PLANT_VISION_MODEL") or "gpt-4o-mini").strip()
+        if not api_url or not api_key:
+            return {
+                "ok": False,
+                "error": "Configure PLANT_VISION_API_URL and PLANT_VISION_API_KEY in Plants settings",
+                "health_score": None,
+            }
+
+        content: list = [{"type": "text", "text": build_multi_angle_prompt(brief)}]
+        for label, raw in images or []:
+            if not raw:
+                continue
+            b64 = base64.standard_b64encode(raw).decode("ascii")
+            content.append({"type": "text", "text": "Camera: " + str(label)})
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            })
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 900,
+        }
+        try:
+            import requests
+            resp = requests.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            text = (
+                body.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            parsed = _extract_json(text)
+            parsed["ok"] = True
+            parsed["analyzer"] = self.name
+            return parsed
+        except Exception as exc:
+            logger.warning("Plant multi-angle vision failed: %s", exc)
             return {"ok": False, "error": str(exc), "health_score": None, "analyzer": self.name}

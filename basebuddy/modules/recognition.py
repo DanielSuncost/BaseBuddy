@@ -738,8 +738,7 @@ class FaceRecognizer:
             import cv2
 
             # Use a single connection for the entire scan to avoid locking issues
-            conn = self.db._connect()
-            try:
+            with self.db._connect() as conn:
                 cursor = conn.cursor()
                 
                 # Get person detections with full images, excluding already processed ones if resume=True
@@ -945,12 +944,6 @@ class FaceRecognizer:
                     self.cluster_unknowns()
                 
                 return result
-            finally:
-                # Close the connection
-                try:
-                    conn.close()
-                except Exception:
-                    pass
                 
         finally:
             with self._scanning_lock:

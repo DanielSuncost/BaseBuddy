@@ -24,6 +24,10 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Soft FD ceiling — BaseBuddy holds many camera/socket FDs. Also a safety net
+# if a leak returns; hard limit stays at the system max.
+ulimit -n 65536 2>/dev/null || ulimit -n 4096 2>/dev/null || true
+
 BACKGROUND=0
 SAFE_MODE=0
 CAM_LIMIT_OVERRIDE=""

@@ -5,6 +5,9 @@ DEFAULT_RETENTION_POLICY = {
     # Detection crops grow very fast on multi-cam installs; keep short by default.
     "detections": {"local_days": 5, "remote_days": 0},
     "stills": {"local_days": 14, "remote_days": 0},
+    # Growth stills and plant captures. Kept apart from stills/detections so
+    # those shorter windows do not delete playback frames.
+    "plants": {"local_days": 90, "remote_days": 0},
     "timelapse": {"local_days": 90, "remote_days": 0},
     "video_thumbs": {"local_days": 7, "remote_days": 0},
     "recording_thumbs": {"local_days": 7, "remote_days": 0},
@@ -14,6 +17,7 @@ RETENTION_SERVICE_LABELS = {
     "recordings": "Recordings (MP4)",
     "detections": "Detection stills",
     "stills": "Timelapse source stills",
+    "plants": "Plant images",
     "timelapse": "Timelapse output",
     "video_thumbs": "Video thumbnails",
     "recording_thumbs": "Recording thumbnails",

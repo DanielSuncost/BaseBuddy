@@ -415,6 +415,84 @@ async function openCameraProfile(camId) {
   modal.show();
 }
 
+const DETECTION_FPS_MIN = 0.5;
+const DETECTION_FPS_MAX = 30;
+let _aiBudgetHintTimer = null;
+
+function clampDetectionFps(fps) {
+  const n = parseFloat(fps);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(DETECTION_FPS_MAX, Math.max(DETECTION_FPS_MIN, n));
+}
+
+function updateProfileDetectionFpsDisplay() {
+  const fpsEl = document.getElementById('profileDetectionFps');
+  const displayEl = document.getElementById('profileDetectionFpsDisplay');
+  if (!fpsEl || !displayEl) return;
+  const fps = parseFloat(fpsEl.value);
+  displayEl.textContent = Number.isFinite(fps) ? `${fps} fps` : '—';
+  scheduleAiBudgetHintRefresh();
+}
+
+function updateProfileDetectionFpsState() {
+  const enabledEl = document.getElementById('profileDetectionEnabled');
+  const fpsEl = document.getElementById('profileDetectionFps');
+  const groupEl = document.getElementById('profileDetectionFpsGroup');
+  const enabled = !enabledEl || enabledEl.checked;
+  if (fpsEl) fpsEl.disabled = !enabled;
+  if (groupEl) groupEl.style.opacity = enabled ? '1' : '0.5';
+  scheduleAiBudgetHintRefresh();
+}
+
+function scheduleAiBudgetHintRefresh() {
+  if (_aiBudgetHintTimer) clearTimeout(_aiBudgetHintTimer);
+  _aiBudgetHintTimer = setTimeout(refreshAiBudgetHint, 150);
+}
+
+async function refreshAiBudgetHint() {
+  const hintEl = document.getElementById('profileAiBudgetHint');
+  const loadEl = document.getElementById('profileAiBudgetLoad');
+  const detailEl = document.getElementById('profileAiBudgetDetail');
+  const camIdEl = document.getElementById('profileCameraId');
+  const fpsEl = document.getElementById('profileDetectionFps');
+  const enabledEl = document.getElementById('profileDetectionEnabled');
+  if (!hintEl || !loadEl || !detailEl || !camIdEl) return;
+
+  const camId = parseInt(camIdEl.value, 10);
+  if (!Number.isFinite(camId)) {
+    hintEl.style.display = 'none';
+    return;
+  }
+
+  const params = new URLSearchParams({
+    camera_id: String(camId),
+    detection_fps: String(clampDetectionFps(fpsEl ? fpsEl.value : 1)),
+    detection_enabled: enabledEl && enabledEl.checked ? 'true' : 'false',
+  });
+
+  try {
+    const resp = await fetch(`/api/cameras/ai-budget?${params}`);
+    const data = await resp.json();
+    if (!data.ok) {
+      hintEl.style.display = 'none';
+      return;
+    }
+    const load = data.load || 'OK';
+    const pct = Math.round(data.budget_percent || 0);
+    const req = data.requested_fps;
+    const cap = data.capacity_fps;
+    loadEl.textContent = `${load} — about ${pct}% of AI budget`;
+    loadEl.style.color = load === 'Heavy' ? '#c0392b' : (load === 'Light' ? '#1e8449' : '#5d6d7e');
+    const inferNote = data.avg_infer_ms
+      ? `avg infer ${data.avg_infer_ms} ms`
+      : `assuming ~${data.infer_ms_assumed} ms/infer`;
+    detailEl.textContent = ` · ${req} fps requested / ~${cap} fps capacity (${inferNote}). GPU shared.`;
+    hintEl.style.display = 'block';
+  } catch (e) {
+    hintEl.style.display = 'none';
+  }
+}
+
 async function setProfileFormValues(camId) {
   const profileCameraId = document.getElementById('profileCameraId');
   const profileModalTitle = document.getElementById('profileModalTitle');
@@ -422,6 +500,7 @@ async function setProfileFormValues(camId) {
   const profilePurpose = document.getElementById('profilePurpose');
   const profileDetectionEnabled = document.getElementById('profileDetectionEnabled');
   const profileCameraEnabled = document.getElementById('profileCameraEnabled');
+  const profileDetectionFps = document.getElementById('profileDetectionFps');
   
   if (!profileCameraId || !profileModalTitle || !profileCameraName || !profilePurpose || !profileDetectionEnabled || !profileCameraEnabled) {
     console.error('Profile form elements not found!');
@@ -434,6 +513,9 @@ async function setProfileFormValues(camId) {
   profilePurpose.value = '';
   profileDetectionEnabled.checked = true;
   profileCameraEnabled.value = 'true';
+  if (profileDetectionFps) profileDetectionFps.value = '1';
+  updateProfileDetectionFpsDisplay();
+  updateProfileDetectionFpsState();
   
   profileCameraId.value = camId;
   profileModalTitle.textContent = `Camera ${camId + 1} Profile`;
@@ -450,13 +532,22 @@ async function setProfileFormValues(camId) {
       profilePurpose.value = profile.purpose || '';
       profileDetectionEnabled.checked = profile.detection_enabled !== false;
       profileCameraEnabled.value = profile.camera_enabled !== false ? 'true' : 'false';
-      console.log('Set form values:', {name: profile.name, purpose: profile.purpose, detection_enabled: profile.detection_enabled, camera_enabled: profile.camera_enabled});
+      if (profileDetectionFps) {
+        profileDetectionFps.value = String(clampDetectionFps(profile.detection_fps));
+      }
+      updateProfileDetectionFpsDisplay();
+      updateProfileDetectionFpsState();
+      refreshAiBudgetHint();
+      console.log('Set form values:', {name: profile.name, purpose: profile.purpose, detection_enabled: profile.detection_enabled, detection_fps: profile.detection_fps, camera_enabled: profile.camera_enabled});
     } else {
       // Only set defaults if no profile exists
       profileCameraName.value = '';
       profilePurpose.value = '';
       profileDetectionEnabled.checked = true;
       profileCameraEnabled.value = 'true';
+      if (profileDetectionFps) profileDetectionFps.value = '1';
+      updateProfileDetectionFpsDisplay();
+      updateProfileDetectionFpsState();
       console.log('No profile found, using defaults');
     }
   } catch (fetchError) {
@@ -466,6 +557,9 @@ async function setProfileFormValues(camId) {
     profilePurpose.value = '';
     profileDetectionEnabled.checked = true;
     profileCameraEnabled.value = 'true';
+    if (profileDetectionFps) profileDetectionFps.value = '1';
+    updateProfileDetectionFpsDisplay();
+    updateProfileDetectionFpsState();
   }
 }
 
@@ -497,6 +591,7 @@ async function saveCameraProfile() {
   const purposeEl = document.getElementById('profilePurpose');
   const detectionEnabledEl = document.getElementById('profileDetectionEnabled');
   const cameraEnabledEl = document.getElementById('profileCameraEnabled');
+  const detectionFpsEl = document.getElementById('profileDetectionFps');
   
   if (!camIdEl || !nameEl || !purposeEl || !detectionEnabledEl || !cameraEnabledEl) {
     showToast('Form elements not found', 'error');
@@ -509,14 +604,15 @@ async function saveCameraProfile() {
   const purpose = purposeEl.value.trim();
   const detectionEnabled = detectionEnabledEl.checked;
   const currentCameraEnabled = cameraEnabledEl.value !== 'false';
+  let detectionFps = clampDetectionFps(detectionFpsEl ? detectionFpsEl.value : 1);
   
   if (isNaN(camId)) {
     showToast('Invalid camera ID: ' + camIdEl.value, 'error');
     return;
   }
-  console.log('Saving profile for camera', camId, {name, purpose, detectionEnabled, camera_enabled: currentCameraEnabled});
+  console.log('Saving profile for camera', camId, {name, purpose, detectionEnabled, detectionFps, camera_enabled: currentCameraEnabled});
 
-  const saveBtn = document.querySelector('#cameraProfileModal .btn.btn-primary-modern');
+  const saveBtn = document.querySelector('#cameraProfileModal .btn.btn-primary');
   let originalSaveContent = null;
   if (saveBtn) {
     saveBtn.disabled = true;
@@ -535,6 +631,7 @@ async function saveCameraProfile() {
         name: name,
         purpose: purpose,
         detection_enabled: detectionEnabled,
+        detection_fps: detectionFps,
         camera_enabled: currentCameraEnabled  // Preserve current state
       })
     });
@@ -554,8 +651,9 @@ async function saveCameraProfile() {
       const successMsg = document.createElement('div');
       successMsg.className = 'alert alert-success alert-dismissible fade show position-fixed';
       successMsg.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+      const rateNote = detectionEnabled ? ` at ${detectionFps} fps` : '';
       successMsg.innerHTML = `
-        <strong>Profile saved!</strong> Detection ${detectionEnabled ? 'enabled' : 'disabled'} for Camera ${camId + 1}.
+        <strong>Profile saved!</strong> Detection ${detectionEnabled ? 'enabled' : 'disabled'}${rateNote} for Camera ${camId + 1}.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       `;
       document.body.appendChild(successMsg);

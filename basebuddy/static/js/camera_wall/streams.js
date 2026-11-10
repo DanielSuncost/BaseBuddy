@@ -107,12 +107,13 @@ function drawFrame(camId, frameB64) {
 }
 
 function fallbackToMJPEG() {
-  // Replace canvases with img tags using MJPEG
+  // Replace canvases with img tags using annotated MJPEG (boxes + tracks).
+  // /video/raw intentionally omits overlays — do not use it for the wall.
   cameras.forEach(cam => {
     const canvas = document.getElementById('canvas-' + cam.id);
     if (canvas) {
       const img = document.createElement('img');
-      img.src = '/video/raw/' + cam.id;
+      img.src = '/video/' + cam.id;
       img.style.cssText = 'width:100%; height:100%; object-fit:contain;';
       img.onload = () => {
         const loading = document.getElementById('loading-' + cam.id);
@@ -142,10 +143,67 @@ function refreshCameraFeed(camId) {
   img.src = `${baseSrc}?t=${cacheBuster}`;
 }
 
+const tileAudioPlayers = {};
+let activeTileAudioId = null;
+
+function _setTileAudioIcon(camId, on) {
+  const btn = document.getElementById('audio-btn-' + camId);
+  if (!btn) return;
+  const icon = btn.querySelector('.material-icons-outlined');
+  if (icon) icon.textContent = on ? 'volume_up' : 'volume_off';
+  btn.classList.toggle('is-on', !!on);
+  btn.title = on ? 'Mute audio' : 'Toggle audio';
+}
+
+function stopTileAudio(camId) {
+  const audio = tileAudioPlayers[camId];
+  if (audio) {
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch (e) {}
+    delete tileAudioPlayers[camId];
+  }
+  _setTileAudioIcon(camId, false);
+  if (activeTileAudioId === camId) activeTileAudioId = null;
+}
+
+function toggleTileAudio(camId) {
+  if (activeTileAudioId === camId && tileAudioPlayers[camId]) {
+    stopTileAudio(camId);
+    return;
+  }
+  if (activeTileAudioId != null && activeTileAudioId !== camId) {
+    stopTileAudio(activeTileAudioId);
+  }
+
+  const audio = new Audio('/video/' + camId + '/audio?t=' + Date.now());
+  audio.preload = 'none';
+  tileAudioPlayers[camId] = audio;
+  activeTileAudioId = camId;
+  _setTileAudioIcon(camId, true);
+
+  audio.play().catch(function (err) {
+    console.warn('[audio] play failed for camera', camId, err);
+    stopTileAudio(camId);
+  });
+  audio.onerror = function () {
+    console.warn('[audio] stream error for camera', camId);
+    stopTileAudio(camId);
+  };
+  audio.onended = function () {
+    stopTileAudio(camId);
+  };
+}
+
 // Stop video streams before page unload to prevent browser hanging on refresh
 window.addEventListener('beforeunload', function() {
   // Find all video img elements and clear their src to stop MJPEG streams
   document.querySelectorAll('img[src*="/video/"]').forEach(img => {
     img.src = '';
+  });
+  Object.keys(tileAudioPlayers).forEach(function (id) {
+    stopTileAudio(parseInt(id, 10));
   });
 });

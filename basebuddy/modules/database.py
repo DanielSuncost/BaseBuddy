@@ -1,8 +1,7 @@
-"""
-Database operations for BaseBuddy
-"""
+"""SQLite analytics database and composed query mixins."""
 import sqlite3
 import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import logging
@@ -45,15 +44,27 @@ class AnalyticsDB(
         self.db_path = db_path
         self.init_db()
 
+    @contextmanager
     def _connect(self):
-        """Open a SQLite connection configured for concurrent read/write."""
+        """Open a SQLite connection that is always closed on context exit.
+
+        Important: ``with sqlite3.connect(...) as conn`` only commits/rollbacks;
+        it does **not** close the connection. Using that pattern here previously
+        leaked FDs until the process hit EMFILE (ulimit soft 1024).
+        """
         conn = sqlite3.connect(self.db_path, timeout=5.0, check_same_thread=False)
         try:
             conn.execute('PRAGMA journal_mode=WAL')
             conn.execute('PRAGMA busy_timeout=5000')
         except Exception:
             pass
-        return conn
+        try:
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def init_db(self):
         """Initialize database tables"""
